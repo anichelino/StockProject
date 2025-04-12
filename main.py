@@ -1,11 +1,15 @@
+import os
 import yfinance as yf 
 import time
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 # Supabase configuration
-SUPABASE_URL = "https://lpywbpqmxwcrnodkeaau.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxweXdicHFteHdjcm5vZGtlYWF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0NzE4MzcsImV4cCI6MjA2MDA0NzgzN30.kqCVUVjkzZUYHsRkJbyy6ug1YG9h1gvGWHMPb-x53Xo"
+#SUPABASE_URL = "https://lpywbpqmxwcrnodkeaau.supabase.co"
+#SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxweXdicHFteHdjcm5vZGtlYWF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0NzE4MzcsImV4cCI6MjA2MDA0NzgzN30.kqCVUVjkzZUYHsRkJbyy6ug1YG9h1gvGWHMPb-x53Xo"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # List of stock tickers to track
