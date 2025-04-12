@@ -1,6 +1,9 @@
 name: Run Stock App
 
 on:
+  push:
+    branches:
+      - main  # Trigger on pushes to the main branch
   schedule:
     - cron: "*/1 * * * *"  # Runs every minute
 
