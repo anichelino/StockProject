@@ -1,4 +1,3 @@
 yfinance
 supabase
 python-dotenv
-numpy
