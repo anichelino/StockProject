@@ -13,7 +13,19 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # List of stock tickers to track
-STOCKS = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"]
+# Fetch the top 100 most relevant stocks from a predefined list or an external source
+STOCKS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JNJ", "V",
+    "UNH", "WMT", "PG", "JPM", "MA", "XOM", "LLY", "HD", "CVX", "ABBV",
+    "KO", "PEP", "MRK", "BAC", "PFE", "COST", "TMO", "AVGO", "DIS", "CSCO",
+    "MCD", "ADBE", "CRM", "NFLX", "ACN", "DHR", "TXN", "LIN", "NEE", "PM",
+    "NKE", "WFC", "BMY", "AMD", "HON", "UNP", "AMGN", "INTC", "LOW", "RTX",
+    "MS", "ELV", "SCHW", "SPGI", "GS", "PLD", "IBM", "BLK", "T", "MDT",
+    "CAT", "CVS", "DE", "AMT", "C", "NOW", "LMT", "INTU", "SYK", "MO",
+    "BKNG", "ISRG", "ADI", "ZTS", "GE", "EQIX", "REGN", "ADP", "MDLZ", "MU",
+    "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
+    "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR"
+]
 
 
 
@@ -57,16 +69,17 @@ def clean_old_records():
     print(f"Deleted records older than one day: {response}")
 
 def check_dropdowns():
+    three_hours_ago = datetime.utcnow() - timedelta(hours=3)
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
     for ticker in STOCKS:
-        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", one_hour_ago.isoformat()).execute()
+        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", one_hour_ago.isoformat()).lt("timestamp", three_hours_ago.isoformat()).execute()
         records = response.data
         if records:
             prices = [record["price"] for record in records]
             max_price = max(prices)
             current_price = prices[-1]
             dropdown = (max_price - current_price) / max_price * 100
-            print(f"{ticker}: Max dropdown in the last hour is {dropdown:.2f}%")
+            print(f"{ticker}: Max dropdown between one and three hours ago is {dropdown:.2f}%")
 
 def main():
     #while True:
@@ -74,7 +87,7 @@ def main():
         stock_data = fetch_stock_data()
         store_data_in_supabase(stock_data)
         check_dropdowns()
-        time.sleep(60)  # Wait for 1 minute
+        #time.sleep(80)  # Wait for 1 minute
 
 if __name__ == "__main__":
     main()
