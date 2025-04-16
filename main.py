@@ -41,12 +41,19 @@ def fetch_stock_data():
     return data
 
 def store_data_in_supabase(data):
- # Ensure the table exists before inserting data
+    # Ensure the table exists before inserting data
     for ticker, price in data.items():
+        # Check if the "dropdown" column exists in the table
+        table_info = supabase.table("stock_prices").select("*").limit(1).execute()
+        if table_info.data and "dropdown" not in table_info.data[0]:
+            print("The 'dropdown' column does not exist in the 'stock_prices' table. Please add it manually to the database schema.")
+            return
+
         supabase.table("stock_prices").insert({
             "ticker": ticker,
             "price": price,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "dropdown": None  # Initialize dropdown as None or 0 if needed
         }).execute()
 
 def check_dropdowns():
