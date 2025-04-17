@@ -61,6 +61,11 @@ def check_dropdowns():
     for ticker in STOCKS:
         response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", one_hour_ago.isoformat()).lt("timestamp", (datetime.utcnow() - timedelta(hours=3)).isoformat()).execute()
         records = response.data
+        print("entered in check_dropdowns")
+        if records:
+            print(f"Records found for {ticker}: {len(records)}")
+        else:
+            print(f"No records found for {ticker} in the last hour.")
         if records:
             prices = [record["price"] for record in records]
             max_price = max(prices)
