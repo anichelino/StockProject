@@ -52,7 +52,7 @@ def store_data_in_supabase(data):
         supabase.table("stock_prices").insert({
             "ticker": ticker,
             "price": price,
-            "timestamp": datetime.now(tz=datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             "dropdown": None  # Initialize dropdown as None or 0 if needed
         }).execute()
 
