@@ -78,6 +78,7 @@ def check_dropdowns():
 
             # Fetch the last recorded dropdown for this ticker
             last_dropdown_response = supabase.table("stock_prices").select("dropdown").eq("ticker", ticker).order("timestamp", desc=True).limit(1).execute()
+            print("** last dropdown response "+str(last_dropdown_response))
             last_dropdown = float(last_dropdown_response.data[0]["dropdown"]) if last_dropdown_response.data else None
 
             # Check if the new dropdown is greater than the last recorded dropdown
