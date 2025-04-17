@@ -61,43 +61,38 @@ def check_dropdowns():
     for ticker in STOCKS:
         response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=timezone.utc) - timedelta(hours=3)).isoformat()).lt("timestamp", one_hour_ago.isoformat()).execute()
         records = response.data
-        
         if records:
             print(f"Records found for {ticker}: {len(records)}")
-            print("records= "+str(records))
+            prices = [record["price"] for record in records]
+            timestamps = [record["timestamp"] for record in records]
+            max_price = max(prices)
+            min_price = min(prices)
+            initial_price = prices[0]
+            final_price = prices[-1]
+            dropdown = (max_price - final_price) / max_price * 100
+
+            # Ensure the "dropdowns" table exists before inserting data
+            table_info = supabase.table("dropdowns").select("*").limit(1).execute()
+            if not table_info.data:
+                print("The 'dropdowns' table does not exist in the database. Creating it now.")
+                supabase.rpc("create_dropdowns_table").execute()
+
+            # Insert dropdown data into the "dropdowns" table
+            supabase.table("dropdowns").insert({
+            "ticker": ticker,
+            "initial_price": initial_price,
+            "final_price": final_price,
+            "max_price": max_price,
+            "min_price": min_price,
+            "dropdown": dropdown,
+            "start_timestamp": timestamps[0],
+            "end_timestamp": timestamps[-1],
+            "calculated_at": datetime.now(timezone.utc).isoformat()
+            }).execute()
+
+            print(f"{ticker}: Dropdown table updated with initial price {initial_price}, final price {final_price}, max price {max_price}, min price {min_price}, and dropdown {dropdown:.2f}%")
         else:
             print(f"No records found for {ticker} in the last hour.")
-        if records:
-            prices = [record["price"] for record in records]
-            max_price = max(prices)
-            current_price = prices[-1]
-            dropdown = (max_price - current_price) / max_price * 100
-            # Ensure the "dropdown" column exists in the database
-            # This step assumes you have the ability to modify the database schema if needed.
-            # If not, you should manually add the "dropdown" column to the "stock_prices" table.
-
-            # Fetch the last recorded dropdown for this ticker
-            last_dropdown_response = supabase.table("stock_prices").select("dropdown").eq("ticker", ticker).order("timestamp", desc=True).limit(1).execute()
-            print("** last dropdown response "+str(last_dropdown_response))
-            last_dropdown = float(last_dropdown_response.data[0]["dropdown"]) if last_dropdown_response.data else None
-
-            # Check if the new dropdown is greater than the last recorded dropdown
-            if last_dropdown is None or dropdown > last_dropdown:
-                # Update the record with the new dropdown
-                supabase.table("stock_prices").insert({
-                    "ticker": ticker,
-                    "price": current_price,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "dropdown": dropdown
-                }).execute()
-
-            print("** last dropdown response data "+str(last_dropdown_response.data))
-
-            if last_dropdown_response.data and "timestamp" in last_dropdown_response.data[0]:
-                last_dropdown_time = last_dropdown_response.data[0]["timestamp"]
-                print(f"{ticker}: Max dropdown in the last hour is {dropdown:.2f}%, Last dropdown was {last_dropdown:.2f}% at {last_dropdown_time}, Current dropdown is at {datetime.now(timezone.utc).isoformat()}")
-            else:
-                last_dropdown_time = "N/A"
             
 
 def clean_old_records():
