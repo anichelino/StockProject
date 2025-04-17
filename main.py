@@ -89,7 +89,10 @@ def check_dropdowns():
                     "dropdown": dropdown
                 }).execute()
 
-            last_dropdown_time = last_dropdown_response.data[0]["timestamp"] if last_dropdown_response.data else "N/A"
+            if last_dropdown_response.data and "timestamp" in last_dropdown_response.data[0]:
+                last_dropdown_time = last_dropdown_response.data[0]["timestamp"]
+            else:
+                last_dropdown_time = "N/A"
             print(f"{ticker}: Max dropdown in the last hour is {dropdown:.2f}%, Last dropdown was {last_dropdown:.2f}% at {last_dropdown_time}, Current dropdown is at {datetime.utcnow().isoformat()}")
 
 def clean_old_records():
