@@ -61,9 +61,10 @@ def check_dropdowns():
     for ticker in STOCKS:
         response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=timezone.utc) - timedelta(hours=3)).isoformat()).lt("timestamp", one_hour_ago.isoformat()).execute()
         records = response.data
-        print("entered in check_dropdowns, records= "+str(records))
+        
         if records:
             print(f"Records found for {ticker}: {len(records)}")
+            print("records= "+str(records))
         else:
             print(f"No records found for {ticker} in the last hour.")
         if records:
@@ -77,7 +78,7 @@ def check_dropdowns():
 
             # Fetch the last recorded dropdown for this ticker
             last_dropdown_response = supabase.table("stock_prices").select("dropdown").eq("ticker", ticker).order("timestamp", desc=True).limit(1).execute()
-            last_dropdown = last_dropdown_response.data[0]["dropdown"] if last_dropdown_response.data else None
+            last_dropdown = float(last_dropdown_response.data[0]["dropdown"]) if last_dropdown_response.data else None
 
             # Check if the new dropdown is greater than the last recorded dropdown
             if last_dropdown is None or dropdown > last_dropdown:
@@ -85,13 +86,15 @@ def check_dropdowns():
                 supabase.table("stock_prices").insert({
                     "ticker": ticker,
                     "price": current_price,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "dropdown": dropdown
                 }).execute()
 
+            print("** last dropdown response data "+str(last_dropdown_response.data))
+
             if last_dropdown_response.data and "timestamp" in last_dropdown_response.data[0]:
                 last_dropdown_time = last_dropdown_response.data[0]["timestamp"]
-                print(f"{ticker}: Max dropdown in the last hour is {dropdown:.2f}%, Last dropdown was {last_dropdown:.2f}% at {last_dropdown_time}, Current dropdown is at {datetime.utcnow().isoformat()}")
+                print(f"{ticker}: Max dropdown in the last hour is {dropdown:.2f}%, Last dropdown was {last_dropdown:.2f}% at {last_dropdown_time}, Current dropdown is at {datetime.now(timezone.utc).isoformat()}")
             else:
                 last_dropdown_time = "N/A"
             
