@@ -93,18 +93,6 @@ def clean_old_records():
     response = supabase.table("stock_prices").delete().lt("timestamp", two_days_ago.isoformat()).execute()
     print(f"Deleted records older than one day: {response}")
 
-def check_dropdowns():
-    three_hours_ago = datetime.utcnow() - timedelta(hours=3)
-    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-    for ticker in STOCKS:
-        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", one_hour_ago.isoformat()).lt("timestamp", three_hours_ago.isoformat()).execute()
-        records = response.data
-        if records:
-            prices = [record["price"] for record in records]
-            max_price = max(prices)
-            current_price = prices[-1]
-            dropdown = (max_price - current_price) / max_price * 100
-            print(f"{ticker}: Max dropdown between one and three hours ago is {dropdown:.2f}%")
 
 def main():
     #while True:
