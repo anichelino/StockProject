@@ -75,7 +75,17 @@ def check_dropdowns():
             table_info = supabase.table("dropdowns").select("*").limit(1).execute()
             if not table_info.data:
                 print("The 'dropdowns' table does not exist in the database. Creating it now.")
-                supabase.rpc("create_dropdowns_table").execute()
+                supabase.table("dropdowns").create({
+                    "ticker": "TEXT",
+                    "initial_price": "FLOAT",
+                    "final_price": "FLOAT",
+                    "max_price": "FLOAT",
+                    "min_price": "FLOAT",
+                    "dropdown": "FLOAT",
+                    "start_timestamp": "TIMESTAMP",
+                    "end_timestamp": "TIMESTAMP",
+                    "calculated_at": "TIMESTAMP"
+                }).execute()
 
             # Insert dropdown data into the "dropdowns" table
             supabase.table("dropdowns").insert({
