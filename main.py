@@ -93,7 +93,7 @@ def check_dropdowns():
 
 def clean_old_records():
     # Calculate the timestamp for one day ago
-    two_days_ago = datetime.now(tz=datetime.timezone.utc) - timedelta(days=2)
+    two_days_ago = datetime.now(tz=timezone.utc) - timedelta(days=2)
     # Delete all records older than one day
     response = supabase.table("stock_prices").delete().lt("timestamp", two_days_ago.isoformat()).execute()
     print(f"Deleted records older than one day: {response}")
