@@ -1,7 +1,7 @@
 import os
 import yfinance as yf 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 
 # Supabase configuration
@@ -57,9 +57,9 @@ def store_data_in_supabase(data):
         }).execute()
 
 def check_dropdowns():
-    one_hour_ago = datetime.now(tz=datetime.timezone.utc) - timedelta(hours=1)
+    one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
     for ticker in STOCKS:
-        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=datetime.timezone.utc) - timedelta(hours=3)).isoformat()).lt("timestamp", one_hour_ago.isoformat()).execute()
+        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=timezone.utc) - timedelta(hours=3)).isoformat()).lt("timestamp", one_hour_ago.isoformat()).execute()
         records = response.data
         print("entered in check_dropdowns, records= "+str(records))
         if records:
