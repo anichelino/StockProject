@@ -75,7 +75,7 @@ def check_dropdowns():
             table_info = supabase.table("dropdowns").select("*").limit(1).execute()
             if not table_info.data:
                 print("The 'dropdowns' table does not exist in the database. Please create it manually using the Supabase dashboard or SQL migration.")
-                return
+                
 
             # Insert dropdown data into the "dropdowns" table
             supabase.table("dropdowns").insert({
