@@ -71,26 +71,47 @@ def check_dropdowns():
             final_price = prices[-1]
             dropdown = (max_price - final_price) / max_price * 100
 
-            # Ensure the "dropdowns" table exists before inserting data
+            # Ensure the "dropdowns" table exists before inserting or updating data
             table_info = supabase.table("dropdowns").select("*").limit(1).execute()
             if not table_info.data:
                 print("The 'dropdowns' table does not exist in the database. Please create it manually using the Supabase dashboard or SQL migration.")
-                
+                continue
 
-            # Insert dropdown data into the "dropdowns" table
-            supabase.table("dropdowns").insert({
-            "ticker": ticker,
-            "initial_price": initial_price,
-            "final_price": final_price,
-            "max_price": max_price,
-            "min_price": min_price,
-            "dropdown": dropdown,
-            "start_timestamp": timestamps[0],
-            "end_timestamp": timestamps[-1],
-            "calculated_at": datetime.now(timezone.utc).isoformat()
-            }).execute()
+            # Check if a record for the current ticker already exists
+            existing_record_response = supabase.table("dropdowns").select("*").eq("ticker", ticker).order("calculated_at", desc=True).limit(1).execute()
+            existing_record = existing_record_response.data[0] if existing_record_response.data else None
 
-            print(f"{ticker}: Dropdown table updated with initial price {initial_price}, final price {final_price}, max price {max_price}, min price {min_price}, and dropdown {dropdown:.2f}%")
+            if existing_record:
+                # Compare the new dropdown with the existing one
+                if dropdown > existing_record["dropdown"]:
+                    # Update the existing record
+                    supabase.table("dropdowns").update({
+                        "initial_price": initial_price,
+                        "final_price": final_price,
+                        "max_price": max_price,
+                        "min_price": min_price,
+                        "dropdown": dropdown,
+                        "start_timestamp": timestamps[0],
+                        "end_timestamp": timestamps[-1],
+                        "calculated_at": datetime.now(timezone.utc).isoformat()
+                    }).eq("id", existing_record["id"]).execute()
+                    print(f"{ticker}: Updated existing dropdown record with new dropdown {dropdown:.2f}%")
+                else:
+                    print(f"{ticker}: Existing dropdown {existing_record['dropdown']:.2f}% is greater than or equal to the new dropdown {dropdown:.2f}%. No update made.")
+            else:
+                # Insert a new record if none exists
+                supabase.table("dropdowns").insert({
+                    "ticker": ticker,
+                    "initial_price": initial_price,
+                    "final_price": final_price,
+                    "max_price": max_price,
+                    "min_price": min_price,
+                    "dropdown": dropdown,
+                    "start_timestamp": timestamps[0],
+                    "end_timestamp": timestamps[-1],
+                    "calculated_at": datetime.now(timezone.utc).isoformat()
+                }).execute()
+                print(f"{ticker}: Inserted new dropdown record with dropdown {dropdown:.2f}%")
         else:
             print(f"No records found for {ticker} in the last hour.")
             
