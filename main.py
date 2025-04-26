@@ -83,7 +83,7 @@ def check_dropdowns():
 
             if existing_record:
                 # Compare the new dropdown with the existing one
-                if dropdown > existing_record["dropdown"]:
+                if dropdown >= existing_record["dropdown"] or dropdown>=6:
                     # Update the existing record
                     supabase.table("dropdowns").update({
                         "initial_price": initial_price,
@@ -96,6 +96,34 @@ def check_dropdowns():
                         "calculated_at": datetime.now(timezone.utc).isoformat()
                     }).eq("id", existing_record["id"]).execute()
                     print(f"{ticker}: Updated existing dropdown record with new dropdown {dropdown:.2f}%")
+                    # Send a message to a Telegram account with the dropdown information
+
+                    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+                    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+                    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+                        message = (
+                            f"Ticker: {ticker}\n"
+                            f"Initial Price: {initial_price}\n"
+                            f"Final Price: {final_price}\n"
+                            f"Max Price: {max_price}\n"
+                            f"Min Price: {min_price}\n"
+                            f"Dropdown: {dropdown:.2f}%\n"
+                            f"Start Timestamp: {timestamps[0]}\n"
+                            f"End Timestamp: {timestamps[-1]}"
+                        )
+                        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                        payload = {
+                            "chat_id": TELEGRAM_CHAT_ID,
+                            "text": message
+                        }
+                        response = requests.post(url, json=payload)
+                        if response.status_code == 200:
+                            print(f"Message sent to Telegram for {ticker}")
+                        else:
+                            print(f"Failed to send message to Telegram for {ticker}: {response.text}")
+                    else:
+                        print("Telegram bot token or chat ID is not set. Unable to send message.")
                 else:
                     print(f"{ticker}: Existing dropdown {existing_record['dropdown']:.2f}% is greater than or equal to the new dropdown {dropdown:.2f}%. No update made.")
             else:
