@@ -84,18 +84,18 @@ def check_dropdowns():
 
             if existing_record:
                 # Compare the new dropdown with the existing one
-                if dropdown >= existing_record["dropdown"] or dropdown>=6:
+                if dropdown >= existing_record["dropdown"] or dropdown>=0:
                     # Update the existing record
-                    supabase.table("dropdowns").update({
-                        "initial_price": initial_price,
-                        "final_price": final_price,
-                        "max_price": max_price,
-                        "min_price": min_price,
-                        "dropdown": dropdown,
-                        "start_timestamp": timestamps[0],
-                        "end_timestamp": timestamps[-1],
-                        "calculated_at": datetime.now(timezone.utc).isoformat()
-                    }).eq("id", existing_record["id"]).execute()
+                    # supabase.table("dropdowns").update({
+                    #     "initial_price": initial_price,
+                    #     "final_price": final_price,
+                    #     "max_price": max_price,
+                    #     "min_price": min_price,
+                    #     "dropdown": dropdown,
+                    #     "start_timestamp": timestamps[0],
+                    #     "end_timestamp": timestamps[-1],
+                    #     "calculated_at": datetime.now(timezone.utc).isoformat()
+                    # }).eq("id", existing_record["id"]).execute()
                     print(f"{ticker}: Updated existing dropdown record with new dropdown {dropdown:.2f}%")
                     # Send a message to a Telegram account with the dropdown information
 
