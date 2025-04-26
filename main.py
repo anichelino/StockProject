@@ -84,7 +84,7 @@ def check_dropdowns():
 
             if existing_record:
                 # Compare the new dropdown with the existing one
-                if dropdown >= existing_record["dropdown"] or dropdown>=0:
+                if dropdown >= existing_record["dropdown"] or dropdown>=6:
                     #Update the existing record
                     supabase.table("dropdowns").update({
                         "initial_price": initial_price,
