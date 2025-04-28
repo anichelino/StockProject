@@ -25,6 +25,11 @@ STOCKS = [
     "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
     "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR"
 ]
+STOCKS += [
+    "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS",
+    "NEM", "ORCL", "PAYX", 
+    "GLD", "SLV", "USO", "UNG", "DBC"
+]
 
 
 
