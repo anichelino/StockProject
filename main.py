@@ -68,7 +68,7 @@ def store_data_in_supabase(data):
 def check_dropdowns():
     one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
     for ticker in STOCKS:
-        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=timezone.utc) - timedelta(hours=3)).isoformat()).lt("timestamp", one_hour_ago.isoformat()).execute()
+        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=timezone.utc) - timedelta(hours=3)).isoformat()).execute()
         records = response.data
         if records:
             print(f"Records found for {ticker}: {len(records)}")
@@ -77,7 +77,15 @@ def check_dropdowns():
             max_price = max(prices)
             min_price = min(prices)
             initial_price = prices[0]
-            final_price = prices[-1]
+
+            # Fetch the current price for the ticker
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="1d", interval="1m")
+            if not hist.empty:
+                final_price = hist.iloc[-1]['Close']
+            else:
+                print(f"Failed to fetch current price for {ticker}. Skipping...")
+                continue
             dropdown = (max_price - final_price) / max_price * 100
 
             # Ensure the "dropdowns" table exists before inserting or updating data
