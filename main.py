@@ -37,11 +37,16 @@ def fetch_stock_data():
     data = {}
     for ticker in STOCKS:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="1d", interval="1m")
-        if not hist.empty:
-            current_price = hist.iloc[-1]['Close']
-            print(f"Current price of {ticker}: {current_price}")  # Print the current stock price
-            data[ticker] = current_price
+        try:
+            hist = stock.history(period="1d", interval="1m")
+            if not hist.empty:
+                current_price = hist.iloc[-1]['Close']
+                print(f"Current price of {ticker}: {current_price}")  # Print the current stock price
+                data[ticker] = current_price
+        except yf.exceptions.YFRateLimitError:
+            print(f"Rate limit hit for {ticker}. Retrying after a delay...")
+            time.sleep(5)  # Wait for 5 seconds before retrying
+        time.sleep(1)  # Add a delay between requests to avoid hitting the rate limit
     return data
 
 def store_data_in_supabase(data):
