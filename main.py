@@ -14,23 +14,41 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # List of stock tickers to track
 # Fetch the top 100 most relevant stocks from a predefined list or an external source
 STOCKS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JNJ", "V",
-    "UNH", "WMT", "PG", "JPM", "MA", "XOM", "LLY", "HD", "CVX", "ABBV",
-    "KO", "PEP", "MRK", "BAC", "PFE", "COST", "TMO", "AVGO", "DIS", "CSCO",
-    "MCD", "ADBE", "CRM", "NFLX", "ACN", "DHR", "TXN", "LIN", "NEE", "PM",
-    "NKE", "WFC", "BMY", "AMD", "HON", "UNP", "AMGN", "INTC", "LOW", "RTX",
-    "MS", "ELV", "SCHW", "SPGI", "GS", "PLD", "IBM", "BLK", "T", "MDT",
-    "CAT", "CVS", "DE", "AMT", "C", "NOW", "LMT", "INTU", "SYK", "MO",
-    "BKNG", "ISRG", "ADI", "ZTS", "GE", "EQIX", "REGN", "ADP", "MDLZ", "MU",
-    "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
-    "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR"
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JNJ", "V", 
+    "UNH", "WMT", "PG", "JPM", "MA", "XOM", "LLY", "HD", "CVX", "ABBV", 
+    "KO", "PEP", "MRK", "BAC", "PFE", "COST", "TMO", "AVGO", "DIS", "CSCO", 
+    "MCD", "ADBE", "CRM", "NFLX", "ACN", "DHR", "TXN", "LIN", "NEE", "PM", 
+    "NKE", "WFC", "BMY", "AMD", "HON", "UNP", "AMGN", "INTC", "LOW", "RTX", 
+    "MS", "ELV", "SCHW", "SPGI", "GS", "PLD", "IBM", "BLK", "T", "MDT", 
+    "CAT", "CVS", "DE", "AMT", "C", "NOW", "LMT", "INTU", "SYK", "MO", 
+    "BKNG", "ISRG", "ADI", "ZTS", "GE", "EQIX", "REGN", "ADP", "MDLZ", "MU", 
+    "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK", 
+    "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR", 
+    "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS", 
+    "NEM", "ORCL", "PAYX", "GLD", "SLV", "USO", "UNG", "DBC",  # Materie prime
+    "NOVO-B.CO",  # Novo Nordisk (Danimarca, salute)
+    "ASML.AS",  # ASML (Paesi Bassi, semiconduttori)
+    "SAP",  # SAP (Germania, software enterprise)
+    "LVMH.PA",  # LVMH (Francia, lusso)
+    "HSBC",  # HSBC (UK, banca)
+    "UNILEVER",  # Unilever (Regno Unito/Paesi Bassi, beni di consumo)
+    "SIEMENS",  # Siemens (Germania, ingegneria e tecnologia)
+    "BMW",  # BMW (Germania, automotive)
+    "STELLANTIS",  # Stellantis (Olanda, automotive)
+    "TOTALENERGIES",  # TotalEnergies (Francia, energia)
+    "BASF",  # BASF (Germania, chimica)
+    "DANONE",  # Danone (Francia, alimenti e bevande)
+    "AIRBUS",  # Airbus (Francia, aerospaziale)
+    "BP",  # BP (Regno Unito, energia)
+    "ROCHE",  # Roche (Svizzera, salute)
+    "NOVARTIS",  # Novartis (Svizzera, farmaceutica)
+    "VODAFONE",  # Vodafone (UK, telecomunicazioni)
+    "DEUTSCHE BANK",  # Deutsche Bank (Germania, banca)
+    "KERING",  # Kering (Francia, moda e lusso)
+    "SHELL",  # Shell (Paesi Bassi, energia)
+    "ALLIANZ",  # Allianz (Germania, assicurazioni)
+    "RENAULT",  # Renault (Francia, automotive)
 ]
-STOCKS += [
-    "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS",
-    "NEM", "ORCL", "PAYX", 
-    "GLD", "SLV", "USO", "UNG", "DBC"
-]
-
 
 
 def fetch_stock_data():
