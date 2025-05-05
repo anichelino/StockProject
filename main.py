@@ -56,7 +56,11 @@ def fetch_stock_data():
     for ticker in STOCKS:
         stock = yf.Ticker(ticker)
         try:
-            hist = stock.history(period="1d", interval="1m")
+            try:
+                hist = stock.history(period="1d", interval="1m")
+            except Exception as e:
+                print(f"Failed to fetch history for {ticker}: {e}")
+                continue
             if not hist.empty:
                 current_price = hist.iloc[-1]['Close']
                 print(f"Current price of {ticker}: {current_price}")  # Print the current stock price
