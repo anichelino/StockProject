@@ -48,6 +48,27 @@ STOCKS = [
     "SHELL",  # Shell (Paesi Bassi, energia)
     "ALLIANZ",  # Allianz (Germania, assicurazioni)
     "RENAULT",  # Renault (Francia, automotive)
+    # Cryptocurrencies
+    "BTC-USD",  # Bitcoin
+    "ETH-USD",  # Ethereum
+    "BNB-USD",  # Binance Coin
+    "XRP-USD",  # XRP
+    "ADA-USD",  # Cardano
+    "SOL-USD",  # Solana
+    "DOT-USD",  # Polkadot
+    "MATIC-USD",  # Polygon
+    "LTC-USD",  # Litecoin
+    "AVAX-USD",  # Avalanche
+    "ATOM-USD",  # Cosmos
+    "LINK-USD",  # Chainlink
+    "XMR-USD",  # Monero
+    "UNI-USD",  # Uniswap
+    "AAVE-USD",  # Aave
+    "FTM-USD",  # Fantom
+    "ALGO-USD",  # Algorand
+    "NEAR-USD",  # NEAR Protocol
+    "EGLD-USD",  # Elrond
+    "VET-USD",  # VeChain
 ]
 
 
