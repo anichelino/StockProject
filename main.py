@@ -1,224 +1,222 @@
 import os
-import requests
-import yfinance as yf 
+import sys
 import time
+import requests
+import yfinance as yf
 from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 
-# Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL") # supabase url taken from secret
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") 
+# ---------------------- CONFIGURAZIONE --------------------------------
+
+# Le variabili arrivano dai "Secrets" del repository GitHub.
+# .strip() elimina spazi e a capo copiati per errore insieme al valore.
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
+TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+
+ALERT_THRESHOLD = 5.0   # % di calo dal massimo delle ultime ore per mandare l'avviso
+LOOKBACK_HOURS = 3      # finestra su cui si cerca il massimo
+RETENTION_DAYS = 30     # quanti giorni di prezzi tenere in stock_prices
+CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
+
+if not SUPABASE_URL.startswith("https://"):
+    sys.exit(
+        "SUPABASE_URL mancante o non valido. Deve essere del tipo "
+        "https://xxxxxxxx.supabase.co (Supabase -> Project Settings -> API -> Project URL). "
+        "Controlla il secret SUPABASE_URL nel repository GitHub."
+    )
+if not SUPABASE_KEY:
+    sys.exit("SUPABASE_KEY mancante. Controlla il secret SUPABASE_KEY nel repository GitHub.")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# List of stock tickers to track
-# Fetch the top 100 most relevant stocks from a predefined list or an external source
-STOCKS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JNJ", "V", 
-    "UNH", "WMT", "PG", "JPM", "MA", "XOM", "LLY", "HD", "CVX", "ABBV", 
-    "KO", "PEP", "MRK", "BAC", "PFE", "COST", "TMO", "AVGO", "DIS", "CSCO", 
-    "MCD", "ADBE", "CRM", "NFLX", "ACN", "DHR", "TXN", "LIN", "NEE", "PM", 
-    "NKE", "WFC", "BMY", "AMD", "HON", "UNP", "AMGN", "INTC", "LOW", "RTX", 
-    "MS", "ELV", "SCHW", "SPGI", "GS", "PLD", "IBM", "BLK", "T", "MDT", 
-    "CAT", "CVS", "DE", "AMT", "C", "NOW", "LMT", "INTU", "SYK", "MO", 
-    "BKNG", "ISRG", "ADI", "ZTS", "GE", "EQIX", "REGN", "ADP", "MDLZ", "MU", 
-    "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK", 
-    "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR", 
-    "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS", 
-    "NEM", "ORCL", "PAYX", "GLD", "SLV", "USO", "UNG", "DBC",  # Materie prime
-    "NOVO-B.CO",  # Novo Nordisk (Danimarca, salute)
-    "ASML.AS",  # ASML (Paesi Bassi, semiconduttori)
-    "SAP",  # SAP (Germania, software enterprise)
-    "LVMH.PA",  # LVMH (Francia, lusso)
-    "HSBC",  # HSBC (UK, banca)
-    "UNILEVER",  # Unilever (Regno Unito/Paesi Bassi, beni di consumo)
-    "SIEMENS",  # Siemens (Germania, ingegneria e tecnologia)
-    "BMW",  # BMW (Germania, automotive)
-    "STELLANTIS",  # Stellantis (Olanda, automotive)
-    "TOTALENERGIES",  # TotalEnergies (Francia, energia)
-    "BASF",  # BASF (Germania, chimica)
-    "DANONE",  # Danone (Francia, alimenti e bevande)
-    "AIRBUS",  # Airbus (Francia, aerospaziale)
-    "BP",  # BP (Regno Unito, energia)
-    "ROCHE",  # Roche (Svizzera, salute)
-    "NOVARTIS",  # Novartis (Svizzera, farmaceutica)
-    "VODAFONE",  # Vodafone (UK, telecomunicazioni)
-    "DEUTSCHE BANK",  # Deutsche Bank (Germania, banca)
-    "KERING",  # Kering (Francia, moda e lusso)
-    "SHELL",  # Shell (Paesi Bassi, energia)
-    "ALLIANZ",  # Allianz (Germania, assicurazioni)
-    "RENAULT",  # Renault (Francia, automotive)
-    # Cryptocurrencies
-    "BTC-USD",  # Bitcoin
-    "ETH-USD",  # Ethereum
-    "BNB-USD",  # Binance Coin
-    "XRP-USD",  # XRP
-    "ADA-USD",  # Cardano
-    "SOL-USD",  # Solana
-    "DOT-USD",  # Polkadot
-    "MATIC-USD",  # Polygon
-    "LTC-USD",  # Litecoin
-    "AVAX-USD",  # Avalanche
-    "ATOM-USD",  # Cosmos
-    "LINK-USD",  # Chainlink
-    "XMR-USD",  # Monero
-    "UNI-USD",  # Uniswap
-    "AAVE-USD",  # Aave
-    "FTM-USD",  # Fantom
-    "ALGO-USD",  # Algorand
-    "NEAR-USD",  # NEAR Protocol
-    "EGLD-USD",  # Elrond
-    "VET-USD",  # VeChain
-]
+# Ticker nel formato di Yahoo Finance. dict.fromkeys elimina i duplicati.
+STOCKS = list(dict.fromkeys([
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JNJ", "V",
+    "UNH", "WMT", "PG", "JPM", "MA", "XOM", "LLY", "HD", "CVX", "ABBV",
+    "KO", "PEP", "MRK", "BAC", "PFE", "COST", "TMO", "AVGO", "DIS", "CSCO",
+    "MCD", "ADBE", "CRM", "NFLX", "ACN", "DHR", "TXN", "LIN", "NEE", "PM",
+    "NKE", "WFC", "BMY", "AMD", "HON", "UNP", "AMGN", "INTC", "LOW", "RTX",
+    "MS", "ELV", "SCHW", "SPGI", "GS", "PLD", "IBM", "BLK", "T", "MDT",
+    "CAT", "CVS", "DE", "AMT", "C", "NOW", "LMT", "INTU", "SYK", "MO",
+    "BKNG", "ISRG", "ADI", "ZTS", "GE", "EQIX", "REGN", "ADP", "MDLZ", "MU",
+    "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
+    "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR",
+    "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS",
+    "NEM", "ORCL", "PAYX",
+    # ETF materie prime
+    "GLD", "SLV", "USO", "UNG", "DBC",
+    # Europa (simboli con suffisso di borsa)
+    "NOVO-B.CO",  # Novo Nordisk
+    "ASML.AS",    # ASML
+    "SAP",        # SAP
+    "MC.PA",      # LVMH
+    "HSBC",       # HSBC
+    "SIE.DE",     # Siemens
+    "BMW.DE",     # BMW
+    "STLAM.MI",   # Stellantis
+    "TTE.PA",     # TotalEnergies
+    "BAS.DE",     # BASF
+    "BN.PA",      # Danone
+    "AIR.PA",     # Airbus
+    "ROG.SW",     # Roche
+    "NOVN.SW",    # Novartis
+    "VOD.L",      # Vodafone
+    "DBK.DE",     # Deutsche Bank
+    "KER.PA",     # Kering
+    "ALV.DE",     # Allianz
+    "RNO.PA",     # Renault
+    # Crypto
+    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD", "SOL-USD",
+    "DOT-USD", "LTC-USD", "AVAX-USD", "ATOM-USD", "LINK-USD", "XMR-USD",
+    "UNI-USD", "AAVE-USD", "ALGO-USD", "NEAR-USD", "EGLD-USD", "VET-USD",
+]))
+
+# ------------------------------------------------------------------------
 
 
-def fetch_stock_data():
-    data = {}
-    for ticker in STOCKS:
-        stock = yf.Ticker(ticker)
+def fetch_prices():
+    """Scarica l'ultimo prezzo di tutti i ticker, a blocchi (molto piu' veloce)."""
+    prices = {}
+    for i in range(0, len(STOCKS), CHUNK_SIZE):
+        chunk = STOCKS[i:i + CHUNK_SIZE]
         try:
+            df = yf.download(
+                chunk, period="1d", interval="1m", group_by="ticker",
+                threads=True, progress=False, auto_adjust=False,
+            )
+        except Exception as e:
+            print(f"Errore download blocco {i // CHUNK_SIZE + 1}: {e}")
+            continue
+
+        for ticker in chunk:
             try:
-                hist = stock.history(period="1d", interval="1m")
-            except Exception as e:
-                print(f"Failed to fetch history for {ticker}: {e}")
+                close = df[ticker]["Close"].dropna()
+            except (KeyError, TypeError):
+                print(f"Nessun dato per {ticker} (ticker non valido o mercato senza dati).")
                 continue
-            if not hist.empty:
-                current_price = hist.iloc[-1]['Close']
-                print(f"Current price of {ticker}: {current_price}")  # Print the current stock price
-                data[ticker] = current_price
-        except yf.exceptions.YFRateLimitError:
-            print(f"Rate limit hit for {ticker}. Retrying after a delay...")
-            time.sleep(5)  # Wait for 5 seconds before retrying
-        time.sleep(1)  # Add a delay between requests to avoid hitting the rate limit
-    return data
+            if not close.empty:
+                prices[ticker] = float(close.iloc[-1])
+        time.sleep(2)
 
-def store_data_in_supabase(data):
-    # Ensure the table exists before inserting data
-    for ticker, price in data.items():
-        # Check if the "dropdown" column exists in the table
-        table_info = supabase.table("stock_prices").select("*").limit(1).execute()
-        if table_info.data and "dropdown" not in table_info.data[0]:
-            print("The 'dropdown' column does not exist in the 'stock_prices' table. Please add it manually to the database schema.")
-            return
+    print(f"Prezzi ottenuti per {len(prices)} ticker su {len(STOCKS)}.")
+    return prices
 
-        supabase.table("stock_prices").insert({
+
+def store_prices(prices):
+    """Salva tutti i prezzi con un'unica scrittura."""
+    if not prices:
+        return
+    now = datetime.now(tz=timezone.utc).isoformat()
+    rows = [{"ticker": t, "price": p, "timestamp": now} for t, p in prices.items()]
+    supabase.table("stock_prices").insert(rows).execute()
+
+
+def fetch_recent_records(since_iso):
+    """Legge tutti i prezzi recenti, a pagine da 1000 (limite di Supabase)."""
+    rows, start, page = [], 0, 1000
+    while True:
+        res = (
+            supabase.table("stock_prices")
+            .select("ticker,price,timestamp")
+            .gte("timestamp", since_iso)
+            .order("timestamp")
+            .range(start, start + page - 1)
+            .execute()
+        )
+        rows.extend(res.data)
+        if len(res.data) < page:
+            break
+        start += page
+    return rows
+
+
+def send_telegram(text):
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        print("Token o chat ID Telegram non impostati: messaggio non inviato.")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    r = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=15)
+    if r.status_code != 200:
+        print(f"Errore invio Telegram: {r.text}")
+
+
+def check_dropdowns(current_prices):
+    since = (datetime.now(tz=timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).isoformat()
+    records = fetch_recent_records(since)
+
+    by_ticker = {}
+    for r in records:
+        by_ticker.setdefault(r["ticker"], []).append(r)
+
+    # Record gia' presenti nella tabella dropdowns (uno per ticker)
+    existing = {}
+    res = supabase.table("dropdowns").select("*").order("calculated_at", desc=True).execute()
+    for row in res.data:
+        existing.setdefault(row["ticker"], row)
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    for ticker, recs in by_ticker.items():
+        final_price = current_prices.get(ticker)
+        if final_price is None:
+            continue
+
+        prices = [r["price"] for r in recs]
+        timestamps = [r["timestamp"] for r in recs]
+        max_price, min_price, initial_price = max(prices), min(prices), prices[0]
+        dropdown = (max_price - final_price) / max_price * 100
+
+        payload = {
             "ticker": ticker,
-            "price": price,
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            "dropdown": None  # Initialize dropdown as None or 0 if needed
-        }).execute()
+            "initial_price": initial_price,
+            "final_price": final_price,
+            "max_price": max_price,
+            "min_price": min_price,
+            "dropdown": dropdown,
+            "start_timestamp": timestamps[0],
+            "end_timestamp": timestamps[-1],
+            "calculated_at": now,
+        }
 
-def check_dropdowns():
-    one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
-    for ticker in STOCKS:
-        response = supabase.table("stock_prices").select("*").eq("ticker", ticker).gte("timestamp", (datetime.now(tz=timezone.utc) - timedelta(hours=3)).isoformat()).execute()
-        records = response.data
-        if records:
-            print(f"Records found for {ticker}: {len(records)}")
-            prices = [record["price"] for record in records]
-            timestamps = [record["timestamp"] for record in records]
-            max_price = max(prices)
-            min_price = min(prices)
-            initial_price = prices[0]
-
-            # Fetch the current price for the ticker
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="1d", interval="1m")
-            if not hist.empty:
-                final_price = hist.iloc[-1]['Close']
-            else:
-                print(f"Failed to fetch current price for {ticker}. Skipping...")
-                continue
-            dropdown = (max_price - final_price) / max_price * 100
-
-            # Ensure the "dropdowns" table exists before inserting or updating data
-            table_info = supabase.table("dropdowns").select("*").limit(1).execute()
-            if not table_info.data:
-                print("The 'dropdowns' table does not exist in the database. Please create it manually using the Supabase dashboard or SQL migration.")
-                continue
-
-            # Check if a record for the current ticker already exists
-            existing_record_response = supabase.table("dropdowns").select("*").eq("ticker", ticker).order("calculated_at", desc=True).limit(1).execute()
-            existing_record = existing_record_response.data[0] if existing_record_response.data else None
-
-            if existing_record:
-                # Compare the new dropdown with the existing one
-                if dropdown > existing_record["dropdown"] or dropdown>=5:
-                    #Update the existing record
-                    supabase.table("dropdowns").update({
-                        "initial_price": initial_price,
-                        "final_price": final_price,
-                        "max_price": max_price,
-                        "min_price": min_price,
-                        "dropdown": dropdown,
-                        "start_timestamp": timestamps[0],
-                        "end_timestamp": timestamps[-1],
-                        "calculated_at": datetime.now(timezone.utc).isoformat()
-                    }).eq("id", existing_record["id"]).execute()
-                    print(f"{ticker}: Updated existing dropdown record with new dropdown {dropdown:.2f}%")
-                    # Send a message to a Telegram account with the dropdown information
-
-                    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-                    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-                    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-                        message = (
-                            f"Ticker: {ticker}\n"
-                            f"Initial Price: {initial_price}\n"
-                            f"Final Price: {final_price}\n"
-                            f"Max Price: {max_price}\n"
-                            f"Min Price: {min_price}\n"
-                            f"Dropdown: {dropdown:.2f}%\n"
-                            f"Start Timestamp: {timestamps[0]}\n"
-                            f"End Timestamp: {timestamps[-1]}"
-                        )
-                        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                        payload = {
-                            "chat_id": TELEGRAM_CHAT_ID,
-                            "text": message
-                        }
-                        response = requests.post(url, json=payload)
-                        if response.status_code == 200:
-                            print(f"Message sent to Telegram for {ticker}")
-                        else:
-                            print(f"Failed to send message to Telegram for {ticker}: {response.text}")
-                    else:
-                        print("Telegram bot token or chat ID is not set. Unable to send message.")
-                else:
-                    print(f"{ticker}: Existing dropdown {existing_record['dropdown']:.2f}% is greater than or equal to the new dropdown {dropdown:.2f}%. No update made.")
-            else:
-                # Insert a new record if none exists
-                supabase.table("dropdowns").insert({
-                    "ticker": ticker,
-                    "initial_price": initial_price,
-                    "final_price": final_price,
-                    "max_price": max_price,
-                    "min_price": min_price,
-                    "dropdown": dropdown,
-                    "start_timestamp": timestamps[0],
-                    "end_timestamp": timestamps[-1],
-                    "calculated_at": datetime.now(timezone.utc).isoformat()
-                }).execute()
-                print(f"{ticker}: Inserted new dropdown record with dropdown {dropdown:.2f}%")
+        old = existing.get(ticker)
+        if old is None:
+            supabase.table("dropdowns").insert(payload).execute()
+            print(f"{ticker}: nuovo record dropdown {dropdown:.2f}%")
+            updated = True
+        elif dropdown > old["dropdown"] or dropdown >= ALERT_THRESHOLD:
+            supabase.table("dropdowns").update(payload).eq("id", old["id"]).execute()
+            print(f"{ticker}: record dropdown aggiornato a {dropdown:.2f}%")
+            updated = True
         else:
-            print(f"No records found for {ticker} in the last hour.")
-            
+            updated = False
+
+        if updated and dropdown >= ALERT_THRESHOLD:
+            send_telegram(
+                f"Ticker: {ticker}\n"
+                f"Prezzo iniziale: {initial_price}\n"
+                f"Prezzo attuale: {final_price}\n"
+                f"Massimo ({LOOKBACK_HOURS}h): {max_price}\n"
+                f"Minimo: {min_price}\n"
+                f"Calo dal massimo: {dropdown:.2f}%\n"
+                f"Da: {timestamps[0]}\n"
+                f"A: {timestamps[-1]}"
+            )
+
 
 def clean_old_records():
-    # Calculate the timestamp for one day ago
-    two_days_ago = datetime.now(tz=timezone.utc) - timedelta(days=2)
-    # Delete all records older than one day
-    response = supabase.table("stock_prices").delete().lt("timestamp", two_days_ago.isoformat()).execute()
-    print(f"Deleted records older than one day: {response}")
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=RETENTION_DAYS)
+    supabase.table("stock_prices").delete().lt("timestamp", cutoff.isoformat()).execute()
+    print(f"Eliminati i prezzi piu' vecchi di {RETENTION_DAYS} giorni.")
 
 
 def main():
-    #while True:
-        clean_old_records()  # Clean up old records
-        stock_data = fetch_stock_data()
-        store_data_in_supabase(stock_data)
-        check_dropdowns()
-        #time.sleep(80)  # Wait for 1 minute
+    clean_old_records()
+    prices = fetch_prices()
+    store_prices(prices)
+    check_dropdowns(prices)
+
 
 if __name__ == "__main__":
     main()
