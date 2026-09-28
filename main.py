@@ -15,7 +15,7 @@ SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
 TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
 
-ALERT_THRESHOLD = 0   # % di calo dal massimo delle ultime ore per mandare l'avviso
+ALERT_THRESHOLD = 1   # % di calo dal massimo delle ultime ore per mandare l'avviso
 LOOKBACK_HOURS = 3      # finestra su cui si cerca il massimo
 RETENTION_DAYS = 30     # quanti giorni di prezzi tenere in stock_prices
 CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
