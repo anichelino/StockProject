@@ -72,7 +72,7 @@ STOCKS = list(dict.fromkeys([
     "KER.PA",     # Kering
     "ALV.DE",     # Allianz
     "RNO.PA",     # Renault
-    "RHM.DE"      # Rheinmetall
+    "RHM.DE",      # Rheinmetall
     # Crypto
     "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD", "SOL-USD",
     "DOT-USD", "LTC-USD", "AVAX-USD", "ATOM-USD", "LINK-USD", "XMR-USD",
