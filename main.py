@@ -44,7 +44,7 @@ STOCKS = list(dict.fromkeys([
     "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
     "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR",
     "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS",
-    "NEM", "ORCL", "PAYX",
+    "NEM", "ORCL", "PAYX","UBER",
     # ETF materie prime
     "GLD", "SLV", "USO", "UNG", "DBC",
     # Futures materie prime aggiuntivi
