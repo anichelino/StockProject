@@ -74,9 +74,7 @@ STOCKS = list(dict.fromkeys([
     "RNO.PA",     # Renault
     "RHM.DE",      # Rheinmetall
     # Crypto
-    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD", "SOL-USD",
-    "DOT-USD", "LTC-USD", "AVAX-USD", "ATOM-USD", "LINK-USD", "XMR-USD",
-    "UNI-USD", "AAVE-USD", "ALGO-USD", "NEAR-USD", "EGLD-USD", "VET-USD",
+    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD", 
 ]))
 
 # ------------------------------------------------------------------------
