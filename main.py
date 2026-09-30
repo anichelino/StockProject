@@ -47,6 +47,11 @@ STOCKS = list(dict.fromkeys([
     "NEM", "ORCL", "PAYX",
     # ETF materie prime
     "GLD", "SLV", "USO", "UNG", "DBC",
+    # Futures materie prime aggiuntivi
+    "NG=F",   # Gas naturale (futures) — in alternativa/aggiunta a UNG
+    "ZW=F",   # Grano (Wheat)
+    "CC=F",   # Cacao (Cocoa)
+    "ALI=F",  # Alluminio
     # Europa (simboli con suffisso di borsa)
     "NOVO-B.CO",  # Novo Nordisk
     "ASML.AS",    # ASML
@@ -67,6 +72,7 @@ STOCKS = list(dict.fromkeys([
     "KER.PA",     # Kering
     "ALV.DE",     # Allianz
     "RNO.PA",     # Renault
+    "RHM.DE"      # Rheinmetall
     # Crypto
     "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD", "SOL-USD",
     "DOT-USD", "LTC-USD", "AVAX-USD", "ATOM-USD", "LINK-USD", "XMR-USD",
