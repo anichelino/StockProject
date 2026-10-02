@@ -16,7 +16,8 @@ TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
 
 ALERT_THRESHOLD = 1   # % di calo dal massimo delle ultime ore per mandare l'avviso
-LOOKBACK_HOURS = 3      # finestra su cui si cerca il massimo
+RISE_THRESHOLD = 1    # % di rialzo dal minimo delle ultime ore per mandare l'avviso
+LOOKBACK_HOURS = 3      # finestra su cui si cerca massimo/minimo
 RETENTION_DAYS = 30     # quanti giorni di prezzi tenere in stock_prices
 CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
 
@@ -44,7 +45,15 @@ STOCKS = list(dict.fromkeys([
     "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
     "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR",
     "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS",
-    "NEM", "ORCL", "PAYX","UBER",
+    "NEM", "ORCL", "PAYX", "UBER",
+    # Alta volatilita' / minore capitalizzazione ma affidabili
+    "PLTR", "RBLX", "U", "PATH", "SNAP", "PINS", "AFRM",
+    "SOFI", "COIN", "MARA", "RIOT",
+    "RIVN", "LCID", "CVNA",
+    "MRNA", "SRPT",
+    "RKLB", "IONQ",
+    "SMCI", "ARM",
+    "UPST", "DKNG",
     # ETF materie prime
     "GLD", "SLV", "USO", "UNG", "DBC",
     # Futures materie prime aggiuntivi
@@ -72,9 +81,9 @@ STOCKS = list(dict.fromkeys([
     "KER.PA",     # Kering
     "ALV.DE",     # Allianz
     "RNO.PA",     # Renault
-    "RHM.DE",      # Rheinmetall
+    "RHM.DE",     # Rheinmetall
     # Crypto
-    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD", 
+    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD",
 ]))
 
 # ------------------------------------------------------------------------
@@ -146,15 +155,8 @@ def send_telegram(text):
         print(f"Errore invio Telegram: {r.text}")
 
 
-def check_dropdowns(current_prices):
-    since = (datetime.now(tz=timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).isoformat()
-    records = fetch_recent_records(since)
-
-    by_ticker = {}
-    for r in records:
-        by_ticker.setdefault(r["ticker"], []).append(r)
-
-    # Record gia' presenti nella tabella dropdowns (uno per ticker)
+def check_dropdowns(current_prices, by_ticker):
+    """Rileva i cali dal massimo della finestra (logica invariata)."""
     existing = {}
     res = supabase.table("dropdowns").select("*").order("calculated_at", desc=True).execute()
     for row in res.data:
@@ -198,12 +200,68 @@ def check_dropdowns(current_prices):
 
         if updated and dropdown >= ALERT_THRESHOLD:
             send_telegram(
-                f"Ticker: {ticker}\n"
+                f"\U0001F53B CALO - {ticker}\n"
                 f"Prezzo iniziale: {initial_price}\n"
                 f"Prezzo attuale: {final_price}\n"
                 f"Massimo ({LOOKBACK_HOURS}h): {max_price}\n"
                 f"Minimo: {min_price}\n"
                 f"Calo dal massimo: {dropdown:.2f}%\n"
+                f"Da: {timestamps[0]}\n"
+                f"A: {timestamps[-1]}"
+            )
+
+
+def check_rises(current_prices, by_ticker):
+    """Rileva i rialzi dal minimo della finestra: stessa logica di check_dropdowns, ma al contrario."""
+    existing = {}
+    res = supabase.table("risings").select("*").order("calculated_at", desc=True).execute()
+    for row in res.data:
+        existing.setdefault(row["ticker"], row)
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    for ticker, recs in by_ticker.items():
+        final_price = current_prices.get(ticker)
+        if final_price is None:
+            continue
+
+        prices = [r["price"] for r in recs]
+        timestamps = [r["timestamp"] for r in recs]
+        max_price, min_price, initial_price = max(prices), min(prices), prices[0]
+        rise = (final_price - min_price) / min_price * 100
+
+        payload = {
+            "ticker": ticker,
+            "initial_price": initial_price,
+            "final_price": final_price,
+            "max_price": max_price,
+            "min_price": min_price,
+            "rise": rise,
+            "start_timestamp": timestamps[0],
+            "end_timestamp": timestamps[-1],
+            "calculated_at": now,
+        }
+
+        old = existing.get(ticker)
+        if old is None:
+            supabase.table("risings").insert(payload).execute()
+            print(f"{ticker}: nuovo record rise {rise:.2f}%")
+            updated = True
+        elif rise > old["rise"] or rise >= RISE_THRESHOLD:
+            supabase.table("risings").update(payload).eq("id", old["id"]).execute()
+            print(f"{ticker}: record rise aggiornato a {rise:.2f}%")
+            updated = True
+        else:
+            updated = False
+
+        if updated and rise >= RISE_THRESHOLD:
+            send_telegram(
+                f"\U0001F7E2 RIALZO - {ticker}\n"
+                f"Prezzo iniziale: {initial_price}\n"
+                f"Prezzo attuale: {final_price}\n"
+                f"Minimo ({LOOKBACK_HOURS}h): {min_price}\n"
+                f"Massimo: {max_price}\n"
+                f"Rialzo dal minimo: {rise:.2f}%\n"
                 f"Da: {timestamps[0]}\n"
                 f"A: {timestamps[-1]}"
             )
@@ -219,7 +277,15 @@ def main():
     clean_old_records()
     prices = fetch_prices()
     store_prices(prices)
-    check_dropdowns(prices)
+
+    since = (datetime.now(tz=timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).isoformat()
+    records = fetch_recent_records(since)
+    by_ticker = {}
+    for r in records:
+        by_ticker.setdefault(r["ticker"], []).append(r)
+
+    check_dropdowns(prices, by_ticker)
+    check_rises(prices, by_ticker)
 
 
 if __name__ == "__main__":
