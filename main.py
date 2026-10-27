@@ -15,8 +15,8 @@ SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
 TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
 
-ALERT_THRESHOLD = 1   # % di calo dal massimo delle ultime ore per mandare l'avviso
-RISE_THRESHOLD = 1    # % di rialzo dal minimo delle ultime ore per mandare l'avviso
+ALERT_THRESHOLD = 4   # % di calo dal massimo delle ultime ore per mandare l'avviso
+RISE_THRESHOLD = 4    # % di rialzo dal minimo delle ultime ore per mandare l'avviso
 LOOKBACK_HOURS = 3      # finestra su cui si cerca massimo/minimo
 RETENTION_DAYS = 30     # quanti giorni di prezzi tenere in stock_prices
 CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
@@ -198,7 +198,7 @@ def check_dropdowns(current_prices, by_ticker):
         else:
             updated = False
 
-        if updated and dropdown >= ALERT_THRESHOLD:
+        if updated or dropdown >= ALERT_THRESHOLD:
             send_telegram(
                 f"\U0001F53B CALO - {ticker}\n"
                 f"Prezzo iniziale: {initial_price}\n"
@@ -254,7 +254,7 @@ def check_rises(current_prices, by_ticker):
         else:
             updated = False
 
-        if updated and rise >= RISE_THRESHOLD:
+        if updated or rise >= RISE_THRESHOLD:
             send_telegram(
                 f"\U0001F7E2 RIALZO - {ticker}\n"
                 f"Prezzo iniziale: {initial_price}\n"
