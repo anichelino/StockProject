@@ -97,7 +97,7 @@ def fetch_prices():
         try:
             df = yf.download(
                 chunk, period="1d", interval="1m", group_by="ticker",
-                threads=True, progress=False, auto_adjust=False,
+                threads=True, progress=False, auto_adjust=False,prepost=True,
             )
         except Exception as e:
             print(f"Errore download blocco {i // CHUNK_SIZE + 1}: {e}")
