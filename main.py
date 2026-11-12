@@ -16,7 +16,7 @@ TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
 TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
 
 ALERT_THRESHOLD = 4   # % di calo dal massimo delle ultime ore per mandare l'avviso
-RISE_THRESHOLD = 5.9    # % di rialzo dal minimo delle ultime ore per mandare l'avviso
+RISE_THRESHOLD = 6.5    # % di rialzo dal minimo delle ultime ore per mandare l'avviso
 LOOKBACK_HOURS = 3      # finestra su cui si cerca massimo/minimo
 RETENTION_DAYS = 30     # quanti giorni di prezzi tenere in stock_prices
 CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
