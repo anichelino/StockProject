@@ -34,26 +34,33 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Ticker nel formato di Yahoo Finance. dict.fromkeys elimina i duplicati.
 STOCKS = list(dict.fromkeys([
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JNJ", "V",
-    "UNH", "WMT", "PG", "JPM", "MA", "XOM", "LLY", "HD", "CVX", "ABBV",
-    "KO", "PEP", "MRK", "BAC", "PFE", "COST", "TMO", "AVGO", "DIS", "CSCO",
-    "MCD", "ADBE", "CRM", "NFLX", "ACN", "DHR", "TXN", "LIN", "NEE", "PM",
-    "NKE", "WFC", "BMY", "AMD", "HON", "UNP", "AMGN", "INTC", "LOW", "RTX",
-    "MS", "ELV", "SCHW", "SPGI", "GS", "PLD", "IBM", "BLK", "T", "MDT",
-    "CAT", "CVS", "DE", "AMT", "C", "NOW", "LMT", "INTU", "SYK", "MO",
-    "BKNG", "ISRG", "ADI", "ZTS", "GE", "EQIX", "REGN", "ADP", "MDLZ", "MU",
-    "GILD", "AXP", "TGT", "BSX", "CI", "CB", "MMC", "EW", "CSX", "DUK",
-    "SO", "PNC", "BDX", "ITW", "SHW", "APD", "ICE", "HUM", "NSC", "PGR",
-    "RY", "BHP", "RIO", "TM", "SHEL", "BP", "UL", "VZ", "FDX", "UPS",
-    "NEM", "ORCL", "PAYX", "UBER",
-    # Alta volatilita' / minore capitalizzazione ma affidabili
-    "PLTR", "RBLX", "U", "PATH", "SNAP", "PINS", "AFRM",
-    "SOFI", "COIN", "MARA", "RIOT",
-    "RIVN", "LCID", "CVNA",
-    "MRNA", "SRPT",
-    "RKLB", "IONQ",
-    "SMCI", "ARM",
-    "UPST", "DKNG",
+        # USA - un titolo per categoria
+    "AAPL",   # Hardware / consumer tech
+    "MSFT",   # Software e cloud
+    "NVDA",   # Semiconduttori / AI
+    "AMZN",   # E-commerce e cloud
+    "GOOGL",  # Internet e pubblicità
+    "TSLA",   # Auto / EV
+    "JPM",    # Banche
+    "V",      # Pagamenti
+    "BRK-B",  # Holding / conglomerato
+    "LLY",    # Farmaceutico
+    "UNH",    # Assicurazioni sanitarie
+    "XOM",    # Energia / petrolio
+    "WMT",    # Retail
+    "PG",     # Beni di consumo
+    "KO",     # Bevande
+    "NFLX",   # Streaming / media
+    "CAT",    # Industria / macchinari
+    "LMT",    # Difesa
+    "UPS",    # Logistica / trasporti
+    "VZ",     # Telecomunicazioni
+    "NEE",    # Utilities / energia rinnovabile
+    "UBER",   # Mobilità (l'avevi chiesto tu)
+    # Alta volatilità
+    "PLTR",   # AI / software di crescita
+    "COIN",   # Crypto / exchange
+    "MRNA",   # Biotech
     # ETF materie prime
     "GLD", "SLV", "USO", "UNG", "DBC",
     # Futures materie prime aggiuntivi
