@@ -30,3 +30,15 @@ def send_telegram(text):
     r = requests.post(url, json={"chat_id": chat_id, "text": text}, timeout=15)
     if r.status_code != 200:
         print(f"Errore invio Telegram: {r.text}")
+
+
+def send_telegram_long(text, limit=3500):
+    """Telegram accetta ~4096 caratteri: spezza i messaggi lunghi tra una riga e l'altra."""
+    chunk = ""
+    for line in text.split("\n"):
+        if chunk and len(chunk) + len(line) + 1 > limit:
+            send_telegram(chunk)
+            chunk = ""
+        chunk += ("\n" if chunk else "") + line
+    if chunk:
+        send_telegram(chunk)
