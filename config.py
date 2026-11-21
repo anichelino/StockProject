@@ -25,8 +25,8 @@ STOCKS = list(dict.fromkeys([
 assert all(len(t) <= 12 for t in STOCKS), "Ticker sospetto: manca una virgola nella lista?"
 
 # ---- Avvisi su cali / rialzi (come prima) ----
-ALERT_THRESHOLD = 1     # % di calo dal massimo della finestra
-RISE_THRESHOLD = 1      # % di rialzo dal minimo della finestra
+ALERT_THRESHOLD = 5     # % di calo dal massimo della finestra
+RISE_THRESHOLD = 6      # % di rialzo dal minimo della finestra
 LOOKBACK_HOURS = 3      # finestra su cui si cercano massimo e minimo
 RETENTION_DAYS = 30     # giorni di prezzi tenuti in stock_prices
 CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
