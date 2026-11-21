@@ -1,6 +1,11 @@
 """
 Ricalcolo giornaliero (gira una volta al giorno su GitHub Actions).
 
+Lo storico CRESCE nel tempo:
+  - ore  : ultimi 59 giorni di Yahoo + archivio permanente (data/bars_15m) che si allunga ogni
+           giorno. Tra due anni le statistiche in ore useranno tutti i due anni raccolti.
+  - giorni: tutto lo storico giornaliero disponibile su Yahoo (period="max"), piu' ogni nuovo giorno.
+
 PER OGNI TITOLO, separatamente, calcola dallo storico:
   - rule_stats / rule_events : "se e' sceso/salito di X% in N ore o N giorni, quante volte poi
                                e' salito/sceso" (regole principali), con data e ora di ogni evento;
@@ -11,6 +16,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+import archive
 import config
 import model
 import rules
@@ -49,12 +55,28 @@ def rule_text(r):
             f"dopo {r['horizon_label']} {word} nel {r['prob_dir'] * 100:.0f}% (n={r['n_all']})")
 
 
-def learn_rules(sb):
-    hour = rules.download(config.STOCKS, "59d", "15m", True)
-    day = rules.download(config.STOCKS, "10y", "1d", False)
-    hour_data = {t: rules.to_arrays(s) for t, s in hour.items() if len(s) > 300}
+def span(data):
+    """Da quando parte lo storico (il titolo con lo storico piu' lungo) e quanti giorni copre."""
+    if not data:
+        return "nessun dato"
+    first = min(v[2][0] for v in data.values())
+    last = max(v[2][-1] for v in data.values())
+    return f"dal {first:%d/%m/%Y} ({(last - first).days} giorni)"
+
+
+def load_hour_data():
+    """Ultimi 59 giorni da Yahoo + archivio permanente. Salva subito i giorni nuovi nell'archivio."""
+    fresh = archive.frame_from_series(rules.download(config.STOCKS, "59d", "15m", True))
+    saved = archive.save_new_days(fresh)
+    print(f"Archivio 15 minuti: aggiunti {len(saved)} giorni" + (f" ({saved[0]} .. {saved[-1]})" if saved else ""))
+    return archive.history(fresh, config.STOCKS)
+
+
+def learn_rules(sb, hour_data):
+    day = rules.download(config.STOCKS, "max", "1d", False)
     day_data = {t: rules.to_arrays(s) for t, s in day.items() if len(s) > 300}
     print(f"Titoli con dati sufficienti: ore {len(hour_data)}, giorni {len(day_data)} su {len(config.STOCKS)}")
+    print(f"Storico usato: ore {span(hour_data)}, giorni {span(day_data)}")
     if not hour_data and not day_data:
         raise SystemExit("Nessun dato scaricato: riprovo al prossimo giro.")
 
@@ -80,15 +102,11 @@ def learn_rules(sb):
     insert_chunks(sb, "rule_events", events, 500)
 
     notif = [r for r in validated if r["prob_dir"] >= config.MIN_NOTIFY_PROB and r["n_all"] >= config.MIN_NOTIFY_N]
-    return validated, notif, n_tested, expected, new_valid != old_valid
+    spans = f"Storico usato: ore {span(hour_data)}; giorni {span(day_data)}."
+    return validated, notif, n_tested, expected, new_valid != old_valid, spans
 
 
-def learn_curve(sb):
-    data = {}
-    raw = rules.download(config.STOCKS, "59d", "15m", True)
-    for t, s in raw.items():
-        if len(s) > 300:
-            data[t] = rules.to_arrays(s)
+def learn_curve(sb, data):
     crows, cevents = model.learn(data, config.WINDOWS, config.FORWARDS)
     now = datetime.now(timezone.utc).isoformat()
     for r in crows:
@@ -102,16 +120,18 @@ def learn_curve(sb):
 
 def main():
     sb = get_supabase()
-    validated, notif, n_tested, expected, changed = [], [], 0, 0.0, False
+    hour_data = load_hour_data()          # prima di tutto: cosi' l'archivio si salva anche se dopo qualcosa va storto
+    validated, notif, n_tested, expected, changed, spans = [], [], 0, 0.0, False, ""
     if config.ENABLE_RULES:
-        validated, notif, n_tested, expected, changed = learn_rules(sb)
+        validated, notif, n_tested, expected, changed, spans = learn_rules(sb, hour_data)
     if config.ENABLE_CURVE_SIGNALS:
-        learn_curve(sb)
+        learn_curve(sb, hour_data)
 
     # Messaggio solo se cambia qualcosa, oppure ogni domenica come riepilogo settimanale
     if config.ENABLE_RULES and (changed or datetime.now(timezone.utc).weekday() == 6):
         lines = [f"Regole ricalcolate: {len(validated)} validate su {n_tested} provate "
                  f"(per puro caso ne aspetteresti ~{expected:.1f}).",
+                 spans,
                  f"Quelle con probabilita' >= {config.MIN_NOTIFY_PROB:.0%} (che daranno notifiche): {len(notif)}."]
         for r in (notif or validated)[:10]:
             lines.append(rule_text(r))
