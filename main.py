@@ -1,131 +1,71 @@
-import os
-import sys
+"""
+Raccolta prezzi + avvisi (gira ogni 15 minuti su GitHub Actions).
+
+Ad ogni giro:
+  1. scarica le ultime barre a 15 minuti, pre-market e after-hours inclusi;
+  2. tiene solo i titoli con dati "freschi" (a mercato chiuso non cambia nulla);
+  3. salva i prezzi su Supabase e manda gli avvisi di calo / rialzo;
+  4. controlla se la situazione del polinomio corrisponde a un segnale statistico
+     validato (tabella signal_stats, aggiornata ogni giorno da learn.py);
+  5. verifica come sono andati i segnali inviati in precedenza.
+"""
+
 import time
-import requests
-import yfinance as yf
+import traceback
 from datetime import datetime, timedelta, timezone
-from supabase import create_client, Client
 
-# ---------------------- CONFIGURAZIONE --------------------------------
+import numpy as np
+import yfinance as yf
 
-# Le variabili arrivano dai "Secrets" del repository GitHub.
-# .strip() elimina spazi e a capo copiati per errore insieme al valore.
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
-SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
-TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+import config
+import model
+from common import get_supabase, send_telegram
 
-ALERT_THRESHOLD = 4   # % di calo dal massimo delle ultime ore per mandare l'avviso
-RISE_THRESHOLD = 6.5    # % di rialzo dal minimo delle ultime ore per mandare l'avviso
-LOOKBACK_HOURS = 3      # finestra su cui si cerca massimo/minimo
-RETENTION_DAYS = 30     # quanti giorni di prezzi tenere in stock_prices
-CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
-
-if not SUPABASE_URL.startswith("https://"):
-    sys.exit(
-        "SUPABASE_URL mancante o non valido. Deve essere del tipo "
-        "https://xxxxxxxx.supabase.co (Supabase -> Project Settings -> API -> Project URL). "
-        "Controlla il secret SUPABASE_URL nel repository GitHub."
-    )
-if not SUPABASE_KEY:
-    sys.exit("SUPABASE_KEY mancante. Controlla il secret SUPABASE_KEY nel repository GitHub.")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Ticker nel formato di Yahoo Finance. dict.fromkeys elimina i duplicati.
-STOCKS = list(dict.fromkeys([
-        # USA - un titolo per categoria
-    "AAPL",   # Hardware / consumer tech
-    "MSFT",   # Software e cloud
-    "NVDA",   # Semiconduttori / AI
-    "AMZN",   # E-commerce e cloud
-    "GOOGL",  # Internet e pubblicità
-    "TSLA",   # Auto / EV
-    "JPM",    # Banche
-    "V",      # Pagamenti
-    "BRK-B",  # Holding / conglomerato
-    "LLY",    # Farmaceutico
-    "UNH",    # Assicurazioni sanitarie
-    "XOM",    # Energia / petrolio
-    "WMT",    # Retail
-    "PG",     # Beni di consumo
-    "KO",     # Bevande
-    "NFLX",   # Streaming / media
-    "CAT",    # Industria / macchinari
-    "LMT",    # Difesa
-    "UPS",    # Logistica / trasporti
-    "VZ",     # Telecomunicazioni
-    "NEE",    # Utilities / energia rinnovabile
-    "UBER",   # Mobilità (l'avevi chiesto tu)
-    # Alta volatilità
-    "PLTR",   # AI / software di crescita
-    "COIN",   # Crypto / exchange
-    "MRNA",   # Biotech
-    # ETF materie prime
-    "GLD", "SLV", "USO", "UNG", "DBC",
-    # Futures materie prime aggiuntivi
-    "NG=F",   # Gas naturale (futures) — in alternativa/aggiunta a UNG
-    "ZW=F",   # Grano (Wheat)
-    "CC=F",   # Cacao (Cocoa)
-    "ALI=F",  # Alluminio
-    # Europa (simboli con suffisso di borsa)
-    "NOVO-B.CO",  # Novo Nordisk
-    "ASML.AS",    # ASML
-    "SAP",        # SAP
-    "MC.PA",      # LVMH
-    "HSBC",       # HSBC
-    "SIE.DE",     # Siemens
-    "BMW.DE",     # BMW
-    "STLAM.MI",   # Stellantis
-    "TTE.PA",     # TotalEnergies
-    "BAS.DE",     # BASF
-    "BN.PA",      # Danone
-    "AIR.PA",     # Airbus
-    "ROG.SW",     # Roche
-    "NOVN.SW",    # Novartis
-    "VOD.L",      # Vodafone
-    "DBK.DE",     # Deutsche Bank
-    "KER.PA",     # Kering
-    "ALV.DE",     # Allianz
-    "RNO.PA",     # Renault
-    "RHM.DE",     # Rheinmetall
-    # Crypto
-    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD",
-]))
-
-# ------------------------------------------------------------------------
+supabase = None   # creato in main()
+STOCKS = config.STOCKS
 
 
-def fetch_prices():
-    """Scarica l'ultimo prezzo di tutti i ticker, a blocchi (molto piu' veloce)."""
-    prices = {}
-    for i in range(0, len(STOCKS), CHUNK_SIZE):
-        chunk = STOCKS[i:i + CHUNK_SIZE]
+def fetch_bars():
+    """Ultimi 5 giorni a 15 minuti, con pre/after-market. Ritorna {ticker: Series dei prezzi}."""
+    bars = {}
+    for i in range(0, len(STOCKS), config.CHUNK_SIZE):
+        chunk = STOCKS[i:i + config.CHUNK_SIZE]
         try:
             df = yf.download(
-                chunk, period="1d", interval="1m", group_by="ticker",
-                threads=True, progress=False, auto_adjust=False,prepost=True,
+                chunk, period="5d", interval="15m", group_by="ticker",
+                threads=True, progress=False, auto_adjust=True, prepost=True,
             )
         except Exception as e:
-            print(f"Errore download blocco {i // CHUNK_SIZE + 1}: {e}")
+            print(f"Errore download blocco {i // config.CHUNK_SIZE + 1}: {e}")
             continue
-
-        for ticker in chunk:
+        for t in chunk:
             try:
-                close = df[ticker]["Close"].dropna()
+                s = df[t]["Close"].dropna().astype(float)
             except (KeyError, TypeError):
-                print(f"Nessun dato per {ticker} (ticker non valido o mercato senza dati).")
+                print(f"Nessun dato per {t}.")
                 continue
-            if not close.empty:
-                prices[ticker] = float(close.iloc[-1])
+            if len(s):
+                bars[t] = s
         time.sleep(2)
+    return bars
 
-    print(f"Prezzi ottenuti per {len(prices)} ticker su {len(STOCKS)}.")
+
+def fresh_prices(bars):
+    """Solo i titoli con una barra recente: a mercato chiuso il prezzo e' fermo e non serve."""
+    now = datetime.now(timezone.utc)
+    prices = {}
+    for t, s in bars.items():
+        ts = s.index[-1]
+        ts = ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC")
+        age_min = (now - ts.to_pydatetime()).total_seconds() / 60
+        if age_min <= config.STALE_MINUTES:
+            prices[t] = float(s.iloc[-1])
+    print(f"Prezzi aggiornati per {len(prices)} titoli su {len(STOCKS)} "
+          f"(gli altri hanno il mercato chiuso o nessun dato).")
     return prices
 
 
 def store_prices(prices):
-    """Salva tutti i prezzi con un'unica scrittura."""
     if not prices:
         return
     now = datetime.now(tz=timezone.utc).isoformat()
@@ -134,7 +74,6 @@ def store_prices(prices):
 
 
 def fetch_recent_records(since_iso):
-    """Legge tutti i prezzi recenti, a pagine da 1000 (limite di Supabase)."""
     rows, start, page = [], 0, 1000
     while True:
         res = (
@@ -152,18 +91,8 @@ def fetch_recent_records(since_iso):
     return rows
 
 
-def send_telegram(text):
-    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
-        print("Token o chat ID Telegram non impostati: messaggio non inviato.")
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    r = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=15)
-    if r.status_code != 200:
-        print(f"Errore invio Telegram: {r.text}")
-
-
 def check_dropdowns(current_prices, by_ticker):
-    """Rileva i cali dal massimo della finestra (logica invariata)."""
+    """Cali dal massimo della finestra."""
     existing = {}
     res = supabase.table("dropdowns").select("*").order("calculated_at", desc=True).execute()
     for row in res.data:
@@ -198,19 +127,19 @@ def check_dropdowns(current_prices, by_ticker):
             supabase.table("dropdowns").insert(payload).execute()
             print(f"{ticker}: nuovo record dropdown {dropdown:.2f}%")
             updated = True
-        elif dropdown > old["dropdown"] or dropdown >= ALERT_THRESHOLD:
+        elif dropdown > old["dropdown"] or dropdown >= config.ALERT_THRESHOLD:
             supabase.table("dropdowns").update(payload).eq("id", old["id"]).execute()
             print(f"{ticker}: record dropdown aggiornato a {dropdown:.2f}%")
             updated = True
         else:
             updated = False
 
-        if updated or dropdown >= ALERT_THRESHOLD:
+        if updated and dropdown >= config.ALERT_THRESHOLD:
             send_telegram(
                 f"\U0001F53B CALO - {ticker}\n"
                 f"Prezzo iniziale: {initial_price}\n"
                 f"Prezzo attuale: {final_price}\n"
-                f"Massimo ({LOOKBACK_HOURS}h): {max_price}\n"
+                f"Massimo ({config.LOOKBACK_HOURS}h): {max_price}\n"
                 f"Minimo: {min_price}\n"
                 f"Calo dal massimo: {dropdown:.2f}%\n"
                 f"Da: {timestamps[0]}\n"
@@ -219,7 +148,7 @@ def check_dropdowns(current_prices, by_ticker):
 
 
 def check_rises(current_prices, by_ticker):
-    """Rileva i rialzi dal minimo della finestra: stessa logica di check_dropdowns, ma al contrario."""
+    """Rialzi dal minimo della finestra."""
     existing = {}
     res = supabase.table("risings").select("*").order("calculated_at", desc=True).execute()
     for row in res.data:
@@ -254,19 +183,19 @@ def check_rises(current_prices, by_ticker):
             supabase.table("risings").insert(payload).execute()
             print(f"{ticker}: nuovo record rise {rise:.2f}%")
             updated = True
-        elif rise > old["rise"] or rise >= RISE_THRESHOLD:
+        elif rise > old["rise"] or rise >= config.RISE_THRESHOLD:
             supabase.table("risings").update(payload).eq("id", old["id"]).execute()
             print(f"{ticker}: record rise aggiornato a {rise:.2f}%")
             updated = True
         else:
             updated = False
 
-        if updated or rise >= RISE_THRESHOLD:
+        if updated and rise >= config.RISE_THRESHOLD:
             send_telegram(
                 f"\U0001F7E2 RIALZO - {ticker}\n"
                 f"Prezzo iniziale: {initial_price}\n"
                 f"Prezzo attuale: {final_price}\n"
-                f"Minimo ({LOOKBACK_HOURS}h): {min_price}\n"
+                f"Minimo ({config.LOOKBACK_HOURS}h): {min_price}\n"
                 f"Massimo: {max_price}\n"
                 f"Rialzo dal minimo: {rise:.2f}%\n"
                 f"Da: {timestamps[0]}\n"
@@ -274,25 +203,112 @@ def check_rises(current_prices, by_ticker):
             )
 
 
+def hours(bars):
+    return f"{bars * 15 / 60:g}h"
+
+
+def signal_message(ticker, W, F, bucket, r, price):
+    d = r["direction"]
+    p_all = r["p_up_all"] if d == 1 else 1 - r["p_up_all"]
+    p_oos = r["p_up_oos"] if d == 1 else 1 - r["p_up_oos"]
+    icon = "\U0001F4C8" if d == 1 else "\U0001F4C9"
+    verb = "salito" if d == 1 else "sceso"
+    return (
+        f"{icon} SEGNALE STATISTICO - {ticker}\n"
+        f"Prezzo: {price:.4g}\n"
+        f"Situazione ({hours(W)}): {model.bucket_label(bucket)}\n"
+        f"In passato, in situazioni simili, il prezzo e' {verb} "
+        f"nelle {hours(F)} successive nel {p_all * 100:.0f}% dei casi "
+        f"(n={r['n_all']}; su dati mai visti: {p_oos * 100:.0f}%, n={r['n_oos']}).\n"
+        f"Non e' una previsione certa: e' una tendenza statistica."
+    )
+
+
+def check_signals(bars, prices):
+    stats = supabase.table("signal_stats").select("*").eq("validated", True).execute().data
+    if not stats:
+        print("Nessun segnale statistico validato al momento (e' normale: succede spesso).")
+        return
+    lookup = {(r["window_bars"], r["fwd_bars"], r["bucket"]): r for r in stats}
+    windows = sorted({k[0] for k in lookup})
+
+    since = (datetime.now(timezone.utc) - timedelta(hours=config.SIGNAL_COOLDOWN_HOURS)).isoformat()
+    recent = (supabase.table("signals_log").select("ticker,window_bars,fwd_bars,bucket")
+              .gte("created_at", since).execute().data)
+    recent_keys = {(r["ticker"], r["window_bars"], r["fwd_bars"], r["bucket"]) for r in recent}
+
+    sent = 0
+    for t in prices:                       # solo titoli con dati freschi
+        s = bars[t]
+        close = s.to_numpy(float)
+        dates = np.array(s.index.date)
+        for W in windows:
+            bucket = model.current_bucket(close, dates, W)
+            if bucket is None:
+                continue
+            for F in config.FORWARDS:
+                r = lookup.get((W, F, bucket))
+                key = (t, W, F, bucket)
+                if r is None or key in recent_keys:
+                    continue
+                send_telegram(signal_message(t, W, F, bucket, r, prices[t]))
+                supabase.table("signals_log").insert({
+                    "ticker": t, "window_bars": W, "fwd_bars": F, "bucket": bucket,
+                    "direction": r["direction"], "price0": prices[t], "p_up": r["p_up_all"],
+                }).execute()
+                recent_keys.add(key)
+                sent += 1
+    print(f"Segnali statistici inviati: {sent}")
+
+
+def resolve_signals(prices):
+    """Dopo l'orizzonte previsto, registra cosa e' davvero successo (verifica dal vivo)."""
+    rows = supabase.table("signals_log").select("*").eq("resolved", False).execute().data
+    now = datetime.now(timezone.utc)
+    for r in rows:
+        created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+        horizon = timedelta(minutes=15 * r["fwd_bars"])
+        if now < created + horizon:
+            continue
+        upd = {"resolved": True, "resolved_at": now.isoformat()}
+        price = prices.get(r["ticker"])
+        if price is not None and now <= created + 2 * horizon:    # troppo in ritardo = non confrontabile
+            upd["outcome_pct"] = (price - r["price0"]) / r["price0"] * 100
+        supabase.table("signals_log").update(upd).eq("id", r["id"]).execute()
+
+
 def clean_old_records():
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=RETENTION_DAYS)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=config.RETENTION_DAYS)
     supabase.table("stock_prices").delete().lt("timestamp", cutoff.isoformat()).execute()
-    print(f"Eliminati i prezzi piu' vecchi di {RETENTION_DAYS} giorni.")
+
+
+def safe(label, fn, *args):
+    """Parti opzionali: se falliscono (es. tabella non ancora creata) il resto continua."""
+    try:
+        fn(*args)
+    except Exception:
+        print(f"[{label}] errore, proseguo con il resto:")
+        traceback.print_exc()
 
 
 def main():
+    global supabase
+    supabase = get_supabase()
+
     clean_old_records()
-    prices = fetch_prices()
+    bars = fetch_bars()
+    prices = fresh_prices(bars)
     store_prices(prices)
 
-    since = (datetime.now(tz=timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).isoformat()
-    records = fetch_recent_records(since)
+    since = (datetime.now(tz=timezone.utc) - timedelta(hours=config.LOOKBACK_HOURS)).isoformat()
     by_ticker = {}
-    for r in records:
+    for r in fetch_recent_records(since):
         by_ticker.setdefault(r["ticker"], []).append(r)
 
     check_dropdowns(prices, by_ticker)
     check_rises(prices, by_ticker)
+    safe("segnali", check_signals, bars, prices)
+    safe("verifica segnali", resolve_signals, prices)
 
 
 if __name__ == "__main__":
