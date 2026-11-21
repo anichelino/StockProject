@@ -1,8 +1,8 @@
 """
 Regole "se il titolo scende (o sale) di X% entro un intervallo, quante volte poi risale (o riscende)?"
 
-Per OGNI titolo, separatamente, e per intervalli sia in ORE (barre da 15 minuti, ultimi 59 giorni)
-sia in GIORNI (barre giornaliere, ultimi 10 anni):
+Per OGNI titolo, separatamente, e per intervalli sia in ORE (barre da 15 minuti: ultimi 59 giorni
+di Yahoo + archivio che cresce ogni giorno) sia in GIORNI (barre giornaliere, tutto lo storico):
 
   1. si calcola la variazione % sulla finestra (es. ultime 2 ore, o ultimi 3 giorni);
   2. un "evento" e' una finestra in cui il titolo ha perso (o guadagnato) almeno la soglia,
