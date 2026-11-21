@@ -25,8 +25,8 @@ STOCKS = list(dict.fromkeys([
 assert all(len(t) <= 12 for t in STOCKS), "Ticker sospetto: manca una virgola nella lista?"
 
 # ---- Avvisi su cali / rialzi (come prima) ----
-ALERT_THRESHOLD = 5     # % di calo dal massimo della finestra
-RISE_THRESHOLD = 5      # % di rialzo dal minimo della finestra
+ALERT_THRESHOLD = 1     # % di calo dal massimo della finestra
+RISE_THRESHOLD = 1      # % di rialzo dal minimo della finestra
 LOOKBACK_HOURS = 3      # finestra su cui si cercano massimo e minimo
 RETENTION_DAYS = 30     # giorni di prezzi tenuti in stock_prices
 CHUNK_SIZE = 50         # ticker scaricati per ogni richiesta a Yahoo
@@ -47,3 +47,27 @@ CANDIDATE_MIN_N = 30    # hanno l'elenco degli eventi salvato in signal_events, 
 P_IS_MAX = 0.005        # significativita' richiesta nel periodo di scoperta
 P_OOS_MAX = 0.05        # significativita' richiesta nel periodo di verifica
 SIGNAL_COOLDOWN_HOURS = 3   # non ripete lo stesso segnale sullo stesso titolo prima di cosi'
+
+# ---- Regole "calo/rialzo entro un intervallo -> quanto spesso poi sale/scende" ----
+ENABLE_RULES = True
+# Ogni regola = (finestra, orizzonte). Esempio (8, 4) = "variazione nelle ultime 2h, esito dopo 1h".
+# ORE: valori in barre da 15 minuti.  GIORNI: valori in giorni di borsa (barre giornaliere, 10 anni).
+HOUR_RULES = [(4, 4), (4, 8), (8, 4), (8, 8), (12, 4)]     # 1h->1h, 1h->2h, 2h->1h, 2h->2h, 3h->1h
+DAY_RULES = [(1, 1), (1, 3), (3, 3), (5, 5), (5, 10)]      # 1g->1g, 1g->3g, 3g->3g, 5g->5g, 5g->10g
+# Soglia di calo/rialzo = K x la variazione "normale" di QUEL titolo su quella finestra
+# (cosi' per Coca-Cola e per Bitcoin la soglia e' diversa). La % reale viene scritta nel messaggio.
+K_LIST = [1.0, 1.5, 2.0]
+RULE_MIN_ROW_IS = 15        # sotto questi numeri di eventi la regola non viene nemmeno salvata
+RULE_MIN_ROW_OOS = 6
+RULE_MIN_EVENTS_IS = 30     # eventi minimi per validare (periodo di scoperta / periodo di verifica)
+RULE_MIN_EVENTS_OOS = 12
+RULE_P_IS_MAX = 0.01        # significativita' richiesta nel periodo di scoperta
+RULE_P_OOS_MAX = 0.10       # ... e nel periodo di verifica (dati mai visti), stessa direzione
+# Notifica solo se la probabilita' storica (nella direzione indicata) e' almeno questa:
+MIN_NOTIFY_PROB = 0.60
+MIN_NOTIFY_N = 25           # ... calcolata su almeno questi eventi
+NOTIFY_ONLY_VALIDATED = True    # False = avvisa anche per regole non confermate sui dati mai visti (piu' avvisi, piu' falsi)
+MAX_RULES_PER_TICKER = 3    # righe massime per titolo in uno stesso messaggio
+
+# Il vecchio modello a polinomio (curva) resta disponibile ma e' spento di default.
+ENABLE_CURVE_SIGNALS = False
