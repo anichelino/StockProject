@@ -1,21 +1,18 @@
 name: Run Stock App
 
 on:
-  push:
-    branches:
-      - main
   schedule:
-    - cron: "*/15 * * * *"   # ogni 15 minuti
-  workflow_dispatch: {}       # permette anche l'avvio manuale
+    - cron: "7,22,37,52 * * * *"   # ogni 15 minuti, sfalsato dai minuti "affollati"
+  workflow_dispatch: {}            # avvio manuale e avvio esterno (cron-job.org)
 
 concurrency:
   group: stock-app
-  cancel-in-progress: false   # se un giro è ancora in corso, il successivo aspetta
+  cancel-in-progress: false        # se un giro e' ancora in corso, il successivo aspetta
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
