@@ -9,7 +9,7 @@ from supabase import create_client, Client
 # ---------------------- CONFIGURAZIONE --------------------------------
 
 # Le variabili arrivano dai "Secrets" del repository GitHub.
-# .strip() elimina spazi e a capo copiati per errore insieme al valore.
+# .strip() elimina spazi e a capo copiati per errore insieme al valore .
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
 SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
 TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
