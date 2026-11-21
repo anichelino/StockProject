@@ -1,6 +1,8 @@
 name: Ricalcolo modello
 
 on:
+  push: 
+   branches: [Test_statistic]
   schedule:
     - cron: "40 4 * * *"           # ogni giorno alle 04:40 UTC
   workflow_dispatch: {}            # avvio manuale (da fare la prima volta!)
