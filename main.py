@@ -2,12 +2,14 @@
 Raccolta prezzi + avvisi (gira ogni 15 minuti su GitHub Actions).
 
 Ad ogni giro:
-  1. scarica le ultime barre a 15 minuti, pre-market e after-hours inclusi ;
+  1. scarica le ultime barre a 15 minuti, pre-market e after-hours inclusi;
   2. tiene solo i titoli con dati "freschi" (a mercato chiuso non cambia nulla);
   3. salva i prezzi su Supabase e manda gli avvisi di calo / rialzo;
-  4. controlla se la situazione del polinomio corrisponde a un segnale statistico
-     validato (tabella signal_stats, aggiornata ogni giorno da learn.py);
-  5. verifica come sono andati i segnali inviati in precedenza.
+  4. controlla le regole "se e' sceso/salito di X% in N ore o N giorni, poi di solito sale/scende"
+     (tabella rule_stats, aggiornata ogni giorno da learn.py) e manda UN messaggio con tutte
+     quelle che scattano adesso;
+  5. (solo se ENABLE_CURVE_SIGNALS) il vecchio segnale a polinomio;
+  6. verifica come sono andati i segnali inviati in precedenza.
 """
 
 import time
@@ -19,7 +21,8 @@ import yfinance as yf
 
 import config
 import model
-from common import get_supabase, send_telegram
+import rules
+from common import get_supabase, send_telegram, send_telegram_long
 
 supabase = None   # creato in main()
 STOCKS = config.STOCKS
@@ -235,7 +238,7 @@ def check_signals(bars, prices):
 
     since = (datetime.now(timezone.utc) - timedelta(hours=config.SIGNAL_COOLDOWN_HOURS)).isoformat()
     recent = (supabase.table("signals_log").select("ticker,window_bars,fwd_bars,bucket")
-              .gte("created_at", since).execute().data)
+              .eq("kind", "curve").gte("created_at", since).execute().data)
     recent_keys = {(r["ticker"], r["window_bars"], r["fwd_bars"], r["bucket"]) for r in recent}
 
     sent = 0
@@ -244,7 +247,7 @@ def check_signals(bars, prices):
             continue
         s = bars[t]
         close = s.to_numpy(float)
-        dates = np.array(s.index.date)
+        _, dates, _ = rules.to_arrays(s)
         current = {}                       # caso attuale per ogni finestra
         for r in rules:
             W, F, bucket = r["window_bars"], r["fwd_bars"], r["bucket"]
@@ -257,10 +260,98 @@ def check_signals(bars, prices):
             supabase.table("signals_log").insert({
                 "ticker": t, "window_bars": W, "fwd_bars": F, "bucket": bucket,
                 "direction": r["direction"], "price0": prices[t], "p_up": r["p_up_all"],
+                "kind": "curve", "horizon_minutes": 15 * F,
             }).execute()
             recent_keys.add(key)
             sent += 1
     print(f"Segnali statistici inviati: {sent}")
+
+
+def check_rules(bars, prices):
+    """Regole "calo/rialzo in un intervallo -> esito": un solo messaggio con tutto quello che scatta ora."""
+    q = (supabase.table("rule_stats").select("*")
+         .gte("prob_dir", config.MIN_NOTIFY_PROB).gte("n_all", config.MIN_NOTIFY_N))
+    if config.NOTIFY_ONLY_VALIDATED:
+        q = q.eq("validated", True)
+    stats = q.execute().data
+    if not stats:
+        print("Nessuna regola con probabilita' sufficiente al momento (normale con pochi dati).")
+        return
+
+    daily = {}
+    if any(r["timeframe"] == "d" for r in stats):
+        daily = rules.download(sorted({r["ticker"] for r in stats if r["timeframe"] == "d"}), "1mo", "1d", False)
+
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(days=21)).isoformat()
+    log = (supabase.table("signals_log").select("ticker,rule_key,created_at")
+           .eq("kind", "rule").gte("created_at", since).execute().data)
+    last_sent = {}
+    for r in log:
+        t = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+        k = (r["ticker"], r["rule_key"])
+        last_sent[k] = max(last_sent.get(k, t), t)
+
+    arrays = {}
+    hits = {}
+    for r in stats:
+        t, tf = r["ticker"], r["timeframe"]
+        if (t, tf) not in arrays:
+            arr = None
+            if tf == "h" and t in prices and t in bars:
+                c, d, _ = rules.to_arrays(bars[t])
+                arr = (c, d, prices[t])
+            elif tf == "d" and t in daily:
+                s = daily[t]
+                age = (now.date() - s.index[-1].date()).days
+                if age <= 5:
+                    c, d, _ = rules.to_arrays(s)
+                    arr = (c, d, float(c[-1]))
+            arrays[(t, tf)] = arr
+        arr = arrays[(t, tf)]
+        if arr is None:
+            continue
+        chg = rules.triggered(r, arr[0], arr[1])
+        if chg is None:
+            continue
+        key = rules.rule_key(r)
+        hm = rules.horizon_minutes(tf, r["horizon_len"])
+        cooldown = timedelta(minutes=max(hm, 60 * config.SIGNAL_COOLDOWN_HOURS))
+        if (t, key) in last_sent and now - last_sent[(t, key)] < cooldown:
+            continue
+        hits.setdefault(t, []).append((r, chg, arr[2], key, hm))
+
+    if not hits:
+        print("Nessuna regola scatta in questo momento.")
+        return
+
+    blocks = []
+    log_rows = []
+    for t, lst in sorted(hits.items()):
+        best = {}
+        for h in lst:            # tra soglie diverse della stessa regola tiene la piu' probabile
+            r = h[0]
+            g = (r["timeframe"], r["window_len"], r["horizon_len"], r["kind"])
+            if g not in best or float(r["prob_dir"]) > float(best[g][0]["prob_dir"]):
+                best[g] = h
+        chosen = sorted(best.values(), key=lambda h: -float(h[0]["prob_dir"]))[:config.MAX_RULES_PER_TICKER]
+        price = lst[0][2]
+        ups = sum(1 for h in chosen if h[0]["direction"] == 1)
+        icon = "\U0001F4C8" if ups * 2 >= len(chosen) else "\U0001F4C9"
+        lines = [f"{icon} {t} - prezzo {price:.4g}"]
+        lines += [rules.describe(h[0], h[1], h[2]) for h in chosen]
+        blocks.append("\n".join(lines))
+        for r, chg, p0, key, hm in lst:          # registra tutte quelle scattate (anche non mostrate)
+            log_rows.append({
+                "ticker": t, "kind": "rule", "rule_key": key, "horizon_minutes": hm,
+                "direction": r["direction"], "price0": p0, "p_up": r["p_up_all"],
+            })
+
+    header = (f"\U0001F514 REGOLE STATISTICHE - {len(blocks)} titoli\n"
+              f"(probabilita' storica, non certezza)")
+    send_telegram_long(header + "\n\n" + "\n\n".join(blocks))
+    supabase.table("signals_log").insert(log_rows).execute()
+    print(f"Regole scattate: {len(log_rows)} su {len(blocks)} titoli.")
 
 
 def resolve_signals(prices):
@@ -269,7 +360,7 @@ def resolve_signals(prices):
     now = datetime.now(timezone.utc)
     for r in rows:
         created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
-        horizon = timedelta(minutes=15 * r["fwd_bars"])
+        horizon = timedelta(minutes=r.get("horizon_minutes") or 15 * (r.get("fwd_bars") or 0))
         if now < created + horizon:
             continue
         upd = {"resolved": True, "resolved_at": now.isoformat()}
@@ -309,7 +400,10 @@ def main():
 
     check_dropdowns(prices, by_ticker)
     check_rises(prices, by_ticker)
-    safe("segnali", check_signals, bars, prices)
+    if config.ENABLE_RULES:
+        safe("regole", check_rules, bars, prices)
+    if config.ENABLE_CURVE_SIGNALS:
+        safe("segnali curva", check_signals, bars, prices)
     safe("verifica segnali", resolve_signals, prices)
 
 
