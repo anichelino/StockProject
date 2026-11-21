@@ -1,5 +1,5 @@
 """
-Cuore statistico del sistema.
+Cuore statistico del sistema, calcolato SEPARATAMENTE PER OGNI TITOLO.
 
 Idea: su ogni finestra di W barre da 15 minuti si adatta un polinomio di secondo
 grado   y = a*x^2 + b*x + c   ai prezzi (normalizzati sulla volatilita' del titolo).
@@ -8,13 +8,16 @@ I due parametri che contano sono
     a = curvatura                          (sta accelerando o rallentando?)
 Non si usa il polinomio per "estrapolare" il futuro (sarebbe inaffidabile): si usano
 b e a per classificare la situazione in 15 "casi" (bucket) e si misura nello STORICO
-cosa e' successo dopo, in media, ogni volta che ci si trovava in quel caso.
+di quel titolo cosa e' successo dopo, ogni volta che si trovava in quel caso.
 
 Un caso diventa "segnale validato" solo se supera TUTTI questi controlli:
   - abbastanza eventi, contati senza sovrapposizioni
   - differenza significativa rispetto a un momento qualunque, nel periodo di scoperta
   - la stessa direzione, ancora significativa, su dati MAI visti (periodo di verifica)
   - vantaggio medio sui dati mai visti maggiore dei costi di transazione
+
+ATTENZIONE: per singolo titolo i dati sono pochi (59 giorni a 15 minuti), quindi serve
+un effetto molto netto per essere validato. E' normale che quasi nessun caso lo sia.
 """
 
 import math
@@ -132,9 +135,15 @@ def _stats(ev, base):
 
 
 def learn(series_by_ticker, windows, forwards):
-    """series_by_ticker: {ticker: (close ndarray, dates ndarray)}. Ritorna le righe per signal_stats."""
-    ev, base = {}, {}
-    for close, dates in series_by_ticker.values():
+    """series_by_ticker: {ticker: (close ndarray, dates ndarray, times DatetimeIndex UTC)}.
+
+    Ritorna (rows, events):
+      rows   = una riga per titolo/finestra/orizzonte/caso, per la tabella signal_stats
+      events = elenco degli eventi (data e ora esatte) dei casi validati o promettenti,
+               per la tabella signal_events, cosi' puoi controllarli a mano su un grafico
+    """
+    rows, events = [], []
+    for ticker, (close, dates, times) in series_by_ticker.items():
         n = len(close)
         split = int(n * config.TRAIN_FRAC)
         idx = np.arange(n)
@@ -143,40 +152,46 @@ def learn(series_by_ticker, windows, forwards):
                 bid, fwd, ok, keep = observations(close, dates, W, F)
                 is_ok = ok & (idx + F < split)
                 oos_ok = ok & (idx >= split)
-                bs = base.setdefault((W, F), {"is": [], "oos": []})
-                bs["is"].append(fwd[is_ok])
-                bs["oos"].append(fwd[oos_ok])
+                b_is, b_oos = fwd[is_ok], fwd[oos_ok]
+                if len(b_is) == 0 or len(b_oos) == 0:
+                    continue
                 for k in range(N_BUCKETS):
                     m = keep & (bid == k)
-                    e = ev.setdefault((W, F, k), {"is": [], "oos": []})
-                    e["is"].append(fwd[m & is_ok])
-                    e["oos"].append(fwd[m & oos_ok])
+                    i_is, i_oos = np.flatnonzero(m & is_ok), np.flatnonzero(m & oos_ok)
+                    if len(i_is) < config.MIN_ROW_IS or len(i_oos) < config.MIN_ROW_OOS:
+                        continue
+                    ev_is, ev_oos = fwd[i_is], fwd[i_oos]
+                    s_is, s_oos = _stats(ev_is, b_is), _stats(ev_oos, b_oos)
+                    if s_is is None or s_oos is None:
+                        continue
 
-    rows = []
-    for (W, F, k), e in ev.items():
-        ev_is, ev_oos = np.concatenate(e["is"]), np.concatenate(e["oos"])
-        b_is, b_oos = np.concatenate(base[(W, F)]["is"]), np.concatenate(base[(W, F)]["oos"])
-        if min(len(ev_is), len(ev_oos), len(b_is), len(b_oos)) == 0:
-            continue
-        s_is, s_oos = _stats(ev_is, b_is), _stats(ev_oos, b_oos)
-        if s_is is None or s_oos is None:
-            continue
+                    d = 1 if s_is["p"] >= s_is["p0"] else -1   # direzione scelta guardando SOLO il periodo di scoperta
+                    excess = d * (s_oos["mean_ev"] - s_oos["mean_base"])
+                    net = excess - config.COST_PCT
+                    validated = bool(
+                        s_is["n"] >= config.MIN_EVENTS_IS and s_oos["n"] >= config.MIN_EVENTS_OOS
+                        and s_is["pval"] < config.P_IS_MAX
+                        and d * (s_oos["p"] - s_oos["p0"]) > 0 and s_oos["pval"] < config.P_OOS_MAX
+                        and net > 0
+                    )
+                    all_ev = np.concatenate([ev_is, ev_oos])
+                    shape = bucket_label(k)
+                    rows.append(dict(
+                        ticker=ticker, window_bars=int(W), fwd_bars=int(F), bucket=int(k), shape=shape,
+                        direction=int(d),
+                        n_is=int(s_is["n"]), p_up_is=s_is["p"], base_is=s_is["p0"], pval_is=s_is["pval"],
+                        n_oos=int(s_oos["n"]), p_up_oos=s_oos["p"], base_oos=s_oos["p0"], pval_oos=s_oos["pval"],
+                        p_up_all=float(np.mean(all_ev > 0)), n_all=int(len(all_ev)),
+                        edge_oos_pct=float(excess), net_oos_pct=float(net), validated=validated,
+                    ))
 
-        d = 1 if s_is["p"] >= s_is["p0"] else -1        # direzione scelta guardando SOLO il periodo di scoperta
-        excess = d * (s_oos["mean_ev"] - s_oos["mean_base"])
-        net = excess - config.COST_PCT
-        validated = (
-            s_is["n"] >= config.MIN_EVENTS_IS and s_oos["n"] >= config.MIN_EVENTS_OOS
-            and s_is["pval"] < config.P_IS_MAX
-            and d * (s_oos["p"] - s_oos["p0"]) > 0 and s_oos["pval"] < config.P_OOS_MAX
-            and net > 0
-        )
-        all_ev = np.concatenate([ev_is, ev_oos])
-        rows.append(dict(
-            window_bars=int(W), fwd_bars=int(F), bucket=int(k), direction=int(d),
-            n_is=int(s_is["n"]), p_up_is=s_is["p"], base_is=s_is["p0"], pval_is=s_is["pval"],
-            n_oos=int(s_oos["n"]), p_up_oos=s_oos["p"], base_oos=s_oos["p0"], pval_oos=s_oos["pval"],
-            p_up_all=float(np.mean(all_ev > 0)), n_all=int(len(all_ev)),
-            edge_oos_pct=float(excess), net_oos_pct=float(net), validated=bool(validated),
-        ))
-    return rows
+                    if validated or (s_is["pval"] < config.CANDIDATE_P and s_is["n"] >= config.CANDIDATE_MIN_N):
+                        for segment, ii in (("is", i_is), ("oos", i_oos)):
+                            for i in ii:
+                                events.append(dict(
+                                    ticker=ticker, window_bars=int(W), fwd_bars=int(F), bucket=int(k),
+                                    shape=shape, bar_time=times[i].isoformat(),
+                                    price0=float(close[i]), price_after=float(close[i + F]),
+                                    outcome_pct=float(fwd[i]), went_up=bool(fwd[i] > 0), segment=segment,
+                                ))
+    return rows, events
