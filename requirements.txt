@@ -1,4 +1,5 @@
 yfinance
-supabase
-python-dotenv
+pandas
 numpy
+supabase
+requests
