@@ -217,7 +217,7 @@ def signal_message(ticker, W, F, bucket, r, price):
         f"{icon} SEGNALE STATISTICO - {ticker}\n"
         f"Prezzo: {price:.4g}\n"
         f"Situazione ({hours(W)}): {model.bucket_label(bucket)}\n"
-        f"In passato, in situazioni simili, il prezzo e' {verb} "
+        f"In passato, su {ticker}, in situazioni simili il prezzo e' {verb} "
         f"nelle {hours(F)} successive nel {p_all * 100:.0f}% dei casi "
         f"(n={r['n_all']}; su dati mai visti: {p_oos * 100:.0f}%, n={r['n_oos']}).\n"
         f"Non e' una previsione certa: e' una tendenza statistica."
@@ -229,8 +229,9 @@ def check_signals(bars, prices):
     if not stats:
         print("Nessun segnale statistico validato al momento (e' normale: succede spesso).")
         return
-    lookup = {(r["window_bars"], r["fwd_bars"], r["bucket"]): r for r in stats}
-    windows = sorted({k[0] for k in lookup})
+    by_ticker = {}
+    for r in stats:
+        by_ticker.setdefault(r["ticker"], []).append(r)
 
     since = (datetime.now(timezone.utc) - timedelta(hours=config.SIGNAL_COOLDOWN_HOURS)).isoformat()
     recent = (supabase.table("signals_log").select("ticker,window_bars,fwd_bars,bucket")
@@ -238,26 +239,27 @@ def check_signals(bars, prices):
     recent_keys = {(r["ticker"], r["window_bars"], r["fwd_bars"], r["bucket"]) for r in recent}
 
     sent = 0
-    for t in prices:                       # solo titoli con dati freschi
+    for t, rules in by_ticker.items():
+        if t not in prices:                # solo titoli con dati freschi
+            continue
         s = bars[t]
         close = s.to_numpy(float)
         dates = np.array(s.index.date)
-        for W in windows:
-            bucket = model.current_bucket(close, dates, W)
-            if bucket is None:
+        current = {}                       # caso attuale per ogni finestra
+        for r in rules:
+            W, F, bucket = r["window_bars"], r["fwd_bars"], r["bucket"]
+            if W not in current:
+                current[W] = model.current_bucket(close, dates, W)
+            key = (t, W, F, bucket)
+            if current[W] != bucket or key in recent_keys:
                 continue
-            for F in config.FORWARDS:
-                r = lookup.get((W, F, bucket))
-                key = (t, W, F, bucket)
-                if r is None or key in recent_keys:
-                    continue
-                send_telegram(signal_message(t, W, F, bucket, r, prices[t]))
-                supabase.table("signals_log").insert({
-                    "ticker": t, "window_bars": W, "fwd_bars": F, "bucket": bucket,
-                    "direction": r["direction"], "price0": prices[t], "p_up": r["p_up_all"],
-                }).execute()
-                recent_keys.add(key)
-                sent += 1
+            send_telegram(signal_message(t, W, F, bucket, r, prices[t]))
+            supabase.table("signals_log").insert({
+                "ticker": t, "window_bars": W, "fwd_bars": F, "bucket": bucket,
+                "direction": r["direction"], "price0": prices[t], "p_up": r["p_up_all"],
+            }).execute()
+            recent_keys.add(key)
+            sent += 1
     print(f"Segnali statistici inviati: {sent}")
 
 
