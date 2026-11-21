@@ -2,7 +2,7 @@
 Raccolta prezzi + avvisi (gira ogni 15 minuti su GitHub Actions).
 
 Ad ogni giro:
-  1. scarica le ultime barre a 15 minuti, pre-market e after-hours inclusi;
+  1. scarica le ultime barre a 15 minuti, pre-market e after-hours inclusi ;
   2. tiene solo i titoli con dati "freschi" (a mercato chiuso non cambia nulla);
   3. salva i prezzi su Supabase e manda gli avvisi di calo / rialzo;
   4. controlla se la situazione del polinomio corrisponde a un segnale statistico
