@@ -17,7 +17,7 @@ STOCKS = list(dict.fromkeys([
     "GC=F", "SI=F", "PL=F", "PA=F",
     # Europa
     "NOVO-B.CO", "ASML.AS", "SAP", "MC.PA", "HSBC", "SIE.DE", "BMW.DE",
-    "STLAM.MI", "TTE.PA", "BAS.DE", "BN.PA", "AIR.PA", "ROG.SW", "NOVN.SW",
+    "STLAM.MI", "TTE.PA", "BAS.DE", "BN.PA", "AIR.PA", "RHHBY", "NOVN.SW",
     "VOD.L", "DBK.DE", "KER.PA", "ALV.DE", "RNO.PA", "RHM.DE",
     # Crypto (24 ore su 24)
     "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "ADA-USD",
