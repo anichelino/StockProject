@@ -163,16 +163,18 @@ def learn_timeframe(tf, data, combos):
                         edge_oos_pct=float(excess), net_oos_pct=float(net), validated=validated,
                     ))
                     n_all = len(all_ev)
-                    if validated or (prob_dir >= 0.55 and n_all >= config.CANDIDATE_MIN_N):
-                        for segment, ii in (("is", i_is), ("oos", i_oos)):
-                            for i in ii:
-                                events.append(dict(
-                                    ticker=ticker, timeframe=tf, window_len=int(L), horizon_len=int(H),
-                                    kind=kind, k=float(k), bar_time=times[i].isoformat(),
-                                    price_start=float(close[i - L]), price0=float(close[i]),
-                                    price_after=float(close[i + H]), change_pct=float(chg[i]),
-                                    outcome_pct=float(fwd[i]), went_up=bool(fwd[i] > 0), segment=segment,
-                                ))
+                    # Eventi salvati solo per le regole che contano (validate o che darebbero notifiche),
+                    # e solo i piu' recenti: con decenni di storico sarebbero centinaia di migliaia.
+                    if validated or (prob_dir >= config.MIN_NOTIFY_PROB and n_all >= config.MIN_NOTIFY_N):
+                        tagged = [("is", i) for i in i_is] + [("oos", i) for i in i_oos]
+                        for segment, i in tagged[-config.EVENTS_MAX_PER_RULE:]:
+                            events.append(dict(
+                                ticker=ticker, timeframe=tf, window_len=int(L), horizon_len=int(H),
+                                kind=kind, k=float(k), bar_time=times[i].isoformat(),
+                                price_start=float(close[i - L]), price0=float(close[i]),
+                                price_after=float(close[i + H]), change_pct=float(chg[i]),
+                                outcome_pct=float(fwd[i]), went_up=bool(fwd[i] > 0), segment=segment,
+                            ))
     return rows, events
 
 

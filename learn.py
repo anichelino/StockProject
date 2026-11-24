@@ -39,6 +39,28 @@ def scoreboard(sb):
             f"{hits / len(rows) * 100:.0f}%; rendimento medio {np.mean(res):+.2f}% (prima dei costi).")
 
 
+def empty_table(sb, table, id_col="id"):
+    """Svuota una tabella grande a pezzi (se la funzione SQL di svuotamento non c'e')."""
+    while True:
+        res = sb.table(table).select(id_col).order(id_col).limit(1).execute().data
+        if not res:
+            return
+        start = res[0][id_col]
+        sb.table(table).delete().gte(id_col, start).lt(id_col, start + 5000).execute()
+
+
+def reset_tables(sb, rpc_name, tables):
+    """Svuota le tabelle con TRUNCATE (istantaneo). Se la funzione non esiste ancora, cancella a pezzi."""
+    try:
+        sb.rpc(rpc_name).execute()
+        return
+    except Exception as e:
+        print(f"Funzione {rpc_name} non disponibile ({e}); svuoto a pezzi. "
+              f"Esegui supabase_schema.sql per renderlo istantaneo.")
+    for t, how in tables:
+        how(t)
+
+
 def insert_chunks(sb, table, rows, size):
     for i in range(0, len(rows), size):
         sb.table(table).insert(rows[i:i + size]).execute()
@@ -96,8 +118,10 @@ def learn_rules(sb, hour_data):
     now = datetime.now(timezone.utc).isoformat()
     for r in rows:
         r["updated_at"] = now
-    sb.table("rule_stats").delete().neq("ticker", "").execute()
-    sb.table("rule_events").delete().gt("id", 0).execute()
+    reset_tables(sb, "reset_rule_tables", [
+        ("rule_events", lambda t: empty_table(sb, t)),
+        ("rule_stats", lambda t: sb.table(t).delete().neq("ticker", "").execute()),
+    ])
     insert_chunks(sb, "rule_stats", rows, 200)
     insert_chunks(sb, "rule_events", events, 500)
 
@@ -111,8 +135,10 @@ def learn_curve(sb, data):
     now = datetime.now(timezone.utc).isoformat()
     for r in crows:
         r["updated_at"] = now
-    sb.table("signal_stats").delete().gte("bucket", 0).execute()
-    sb.table("signal_events").delete().gte("bucket", 0).execute()
+    reset_tables(sb, "reset_signal_tables", [
+        ("signal_events", lambda t: empty_table(sb, t)),
+        ("signal_stats", lambda t: sb.table(t).delete().gte("bucket", 0).execute()),
+    ])
     insert_chunks(sb, "signal_stats", crows, 200)
     insert_chunks(sb, "signal_events", cevents, 500)
     print(f"Modello a curva: {len(crows)} casi, {sum(r['validated'] for r in crows)} validati.")

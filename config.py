@@ -68,6 +68,7 @@ MIN_NOTIFY_PROB = 0.60
 MIN_NOTIFY_N = 25           # ... calcolata su almeno questi eventi
 NOTIFY_ONLY_VALIDATED = True    # False = avvisa anche per regole non confermate sui dati mai visti (piu' avvisi, piu' falsi)
 MAX_RULES_PER_TICKER = 3    # righe massime per titolo in uno stesso messaggio
+EVENTS_MAX_PER_RULE = 300   # in rule_events si tengono gli ultimi N eventi di ogni regola (i piu' recenti)
 
 # Il vecchio modello a polinomio (curva) resta disponibile ma e' spento di default.
 ENABLE_CURVE_SIGNALS = False
